@@ -108,46 +108,49 @@ func ParseArgs(dbFile string) {
 				}
 			case "project":
 				fmt.Print("Please enter new project name: ")
-				var project string
-				fmt.Scan(&project)
-				if row := db.QueryRow("SELECT id FROM projects WHERE project = ? AND done = 0", project); row != nil {
-					fmt.Println("Project `" + project + "` already exists")
+				var projectName string
+				fmt.Scan(&projectName)
+				if row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", projectName); row != nil {
+					fmt.Println("Project `" + projectName + "` already exists")
 					return
 				}
 
-				if _, err := db.Exec("INSERT INTO projects (id, project, done, created_at) VALUES (NULL, ?, 0, date())", project); err != nil {
+				if _, err := db.Exec("INSERT INTO projects (id, name, done, created_at) VALUES (NULL, ?, 0, date())", projectName); err != nil {
 					nonFatalError(err)
 				}
 
-				fmt.Println("Project `" + project + "` has been created")
+				fmt.Println("Project `" + projectName + "` has been created")
 			default:
-				project := ""
+				projectName := ""
 				for i := 2; i < len(cmdArgs); i++ {
 					if i > 2 {
-						project += " "
+						projectName += " "
 					}
-					project += cmdArgs[i]
+					projectName += cmdArgs[i]
 				}
 
-				if row := db.QueryRow("SELECT done FROM projects WHERE project = ? AND WHERE done = 0", project); row == nil {
-					rows, err := db.Query("SELECT id FROM projects WHERE project = ?", project)
+				row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND WHERE done = 0", projectName)
+				if row == nil {
+					rows, err := db.Query("SELECT id FROM projects WHERE name = ?", projectName)
 					if err != nil {
 						nonFatalError(err)
 					}
 					if rows.Next() {
-						fmt.Println("No active project `" + project + "` exists")
+						fmt.Println("No active project `" + projectName + "` exists")
 						return
 					}
-					nonFatalError(invalidCommand, project)
+					nonFatalError(invalidCommand, projectName)
 				}
+				var projectID uint32
+				row.Scan(&projectID)
 
-				fmt.Print("Please enter new task for the project `" + project + "`: ")
+				fmt.Print("Please enter new task for the project `" + projectName + "`: ")
 				var task string
 				fmt.Scanln(&task)
 				fmt.Print("Due date (YYYY-MM-DD): ")
 				var due string
 				fmt.Scanln(&due)
-				if _, err := db.Exec("INSERT INTO tasks (id, task, project, due, done, created_at) VALUES (NULL, ?, ?, ?, 0, datetime())", task, project, due); err != nil {
+				if _, err := db.Exec("INSERT INTO tasks (id, task, project_id, due, done, created_at) VALUES (NULL, ?, ?, ?, 0, datetime())", task, projectID, due); err != nil {
 					nonFatalError(err)
 				}
 			}
@@ -190,32 +193,32 @@ func ParseArgs(dbFile string) {
 				fmt.Println("Finished task " + cmdArgs[3] + "\n" + finishedTask)
 			}
 		default:
-			project := ""
+			projectName := ""
 			for i := 2; i < len(cmdArgs)-1; i++ {
 				if i > 2 {
-					project += " "
+					projectName += " "
 				}
-				project += cmdArgs[i]
+				projectName += cmdArgs[i]
 			}
 			if taskID, err := strconv.Atoi(cmdArgs[len(cmdArgs)-1]); err != nil {
-				project += " " + cmdArgs[len(cmdArgs)-1]
-				if row := db.QueryRow("SELECT id FROM projects WHERE project = ? AND done = 0", project); row == nil {
-					fmt.Println("No active project `" + project + "` exists")
+				projectName += " " + cmdArgs[len(cmdArgs)-1]
+				if row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", projectName); row == nil {
+					fmt.Println("No active project `" + projectName + "` exists")
 					return
 				}
-				if _, err := db.Exec("UPDATE projects SET done = 1 WHERE project = ? AND done = 0", project); err != nil {
+				if _, err := db.Exec("UPDATE projects SET done = 1 WHERE name = ? AND done = 0", projectName); err != nil {
 					nonFatalError(err)
 				}
 			} else {
-				row := db.QueryRow("SELECT id FROM projects WHERE project = ? AND done = 0", project)
+				row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", projectName)
 				if row == nil {
-					fmt.Println("No active project `" + project + "` exists")
+					fmt.Println("No active project `" + projectName + "` exists")
 					return
 				}
 				var projectID int
 				row.Scan(&projectID)
 
-				res, err := db.Exec("UPDATE tasks SET done = 1 WHERE id = ? AND project = ?", taskID, projectID)
+				res, err := db.Exec("UPDATE tasks SET done = 1 WHERE id = ? AND project_id = ?", taskID, projectID)
 				if err != nil {
 					nonFatalError(err)
 				}
@@ -224,10 +227,10 @@ func ParseArgs(dbFile string) {
 					nonFatalError(err)
 				}
 				if updatedRows == 0 {
-					fmt.Println("Task `" + cmdArgs[len(cmdArgs)-1] + "` does not exist for project `" + project + "`")
+					fmt.Println("Task `" + cmdArgs[len(cmdArgs)-1] + "` does not exist for project `" + projectName + "`")
 					return
 				}
-				fmt.Println("Task `" + cmdArgs[len(cmdArgs)-1] + "` for project `" + project + "` has been marked complete")
+				fmt.Println("Task `" + cmdArgs[len(cmdArgs)-1] + "` for project `" + projectName + "` has been marked complete")
 			}
 		}
 	case "in":
