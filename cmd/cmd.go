@@ -28,16 +28,50 @@ func nonFatalError(err error, args ...string) {
 	os.Exit(0)
 }
 
-type nextAction struct {
+type tudoCapture struct {
+	ID        uint32
+	Content   string
+	Done      bool
+	CreatedAt string
+}
+
+func (c *tudoCapture) Format() string {
+	return fmt.Sprint(c.ID) + "\n" + c.Content + "\n"
+}
+
+type tudoNextAction struct {
 	ID        uint32
 	Task      string
 	Done      bool
 	CreatedAt string
 }
 
-func (a *nextAction) Format() string {
-	sb := fmt.Sprint(a.ID) + "\n" + a.Task + "\n"
-	return sb
+func (a *tudoNextAction) Format() string {
+	return fmt.Sprint(a.ID) + "\n" + a.Task + "\n"
+}
+
+type tudoProjectAction struct {
+	ID        uint32
+	Task      string
+	Project   uint32
+	Due       string
+	Done      bool
+	CreatedAt string
+}
+
+func (a *tudoProjectAction) Format() string {
+	return fmt.Sprint(a.ID) + "\n" + a.Task + "\n" + a.Due + "\n"
+}
+
+type tudoProject struct {
+	ID        uint32
+	Name      string
+	Done      bool
+	CreatedAt string
+}
+
+func (p *tudoProject) Format() string {
+	return p.Name + "\n"
 }
 
 func ParseArgs(dbFile string) {
@@ -213,9 +247,9 @@ func ParseArgs(dbFile string) {
 		}
 		defer rows.Close()
 
-		var nextActions []nextAction
+		var nextActions []tudoNextAction
 		for rows.Next() {
-			var action nextAction
+			var action tudoNextAction
 			if err := rows.Scan(&action.ID, &action.Task); err != nil {
 				nonFatalError(err)
 			}
@@ -242,6 +276,8 @@ func ParseArgs(dbFile string) {
 		Todo("sql")
 	case "review":
 		Todo("review")
+	case "projects":
+		Todo("List active projects")
 	default:
 		Todo("project")
 	}
