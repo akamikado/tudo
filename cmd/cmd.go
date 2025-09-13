@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"database/sql"
 	"errors"
 	"fmt"
 	"os"
 	"strconv"
+	"time"
 
 	"tudo/database"
 )
@@ -63,6 +65,19 @@ func (a *tudoProjectAction) Format() string {
 	return fmt.Sprint(a.ID) + "\n" + a.Task + "\n" + a.Due + "\n"
 }
 
+func projectExists(db *sql.DB, name string) (bool, uint32) {
+	row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", name)
+	var id uint32
+	err := row.Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, 0
+	} else if err != nil {
+		nonFatalError(err)
+	}
+
+	return true, id
+}
+
 type tudoProject struct {
 	ID        uint32
 	Name      string
@@ -110,7 +125,7 @@ func ParseArgs(dbFile string) {
 				fmt.Print("Please enter new project name: ")
 				var projectName string
 				fmt.Scan(&projectName)
-				if row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", projectName); row != nil {
+				if exists, _ := projectExists(db, projectName); exists {
 					fmt.Println("Project `" + projectName + "` already exists")
 					return
 				}
@@ -129,8 +144,9 @@ func ParseArgs(dbFile string) {
 					projectName += cmdArgs[i]
 				}
 
-				row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND WHERE done = 0", projectName)
-				if row == nil {
+				var projectID uint32
+				exists, projectID := projectExists(db, projectName)
+				if !exists {
 					rows, err := db.Query("SELECT id FROM projects WHERE name = ?", projectName)
 					if err != nil {
 						nonFatalError(err)
@@ -141,8 +157,6 @@ func ParseArgs(dbFile string) {
 					}
 					nonFatalError(invalidCommand, projectName)
 				}
-				var projectID uint32
-				row.Scan(&projectID)
 
 				fmt.Print("Please enter new task for the project `" + projectName + "`: ")
 				var task string
@@ -182,10 +196,6 @@ func ParseArgs(dbFile string) {
 				fmt.Println("Next action " + cmdArgs[3] + " does not exist")
 			} else {
 				row := db.QueryRow("SELECT task FROM next_actions WHERE id = ?", actionID)
-				if row == nil {
-					nonFatalError(err)
-				}
-
 				var finishedTask string
 				if err := row.Scan(&finishedTask); err != nil {
 					nonFatalError(err)
@@ -202,21 +212,22 @@ func ParseArgs(dbFile string) {
 			}
 			if taskID, err := strconv.Atoi(cmdArgs[len(cmdArgs)-1]); err != nil {
 				projectName += " " + cmdArgs[len(cmdArgs)-1]
-				if row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", projectName); row == nil {
+
+				if exists, _ := projectExists(db, projectName); !exists {
 					fmt.Println("No active project `" + projectName + "` exists")
 					return
 				}
+
 				if _, err := db.Exec("UPDATE projects SET done = 1 WHERE name = ? AND done = 0", projectName); err != nil {
 					nonFatalError(err)
 				}
+				fmt.Println("Finished project `" + projectName + "`\n")
 			} else {
-				row := db.QueryRow("SELECT id FROM projects WHERE name = ? AND done = 0", projectName)
-				if row == nil {
+				exists, projectID := projectExists(db, projectName)
+				if !exists {
 					fmt.Println("No active project `" + projectName + "` exists")
 					return
 				}
-				var projectID int
-				row.Scan(&projectID)
 
 				res, err := db.Exec("UPDATE tasks SET done = 1 WHERE id = ? AND project_id = ?", taskID, projectID)
 				if err != nil {
@@ -269,19 +280,69 @@ func ParseArgs(dbFile string) {
 
 	case "edit":
 		Todo("edit")
-	case "purge":
-		Todo("purge")
+	case "clean":
+		Todo("clean")
 	case "undo":
 		Todo("undo")
 	case "redo":
 		Todo("redo")
-	case "sql":
-		Todo("sql")
 	case "review":
 		Todo("review")
-	case "projects":
-		Todo("List active projects")
 	default:
-		Todo("project")
+		if len(cmdArgs) == 2 && cmdArgs[1] == "projects" {
+			rows, err := db.Query("SELECT id, name, done, created_at FROM projects WHERE done = 0")
+			if err != nil {
+				nonFatalError(err)
+			}
+			var projects []tudoProject
+			for rows.Next() {
+				var p tudoProject
+				if err := rows.Scan(&p.ID, &p.Name, &p.Done, &p.CreatedAt); err != nil {
+					nonFatalError(err)
+				}
+				projects = append(projects, p)
+			}
+			if len(projects) == 0 {
+				fmt.Println("No active projects")
+			}
+			for _, p := range projects {
+				fmt.Print("- " + p.Format())
+			}
+		} else {
+			projectName := ""
+			for i := 1; i < len(cmdArgs); i++ {
+				if i > 2 {
+					projectName += " "
+				}
+				projectName += cmdArgs[i]
+			}
+			exists, projectID := projectExists(db, projectName)
+			if !exists {
+				fmt.Println("No active project `" + projectName + "` exists\n")
+			}
+
+			now := time.Now()
+			todayDate := now.Format("2006-01-02")
+
+			rows, err := db.Query("SELECT id, task, project_id, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", projectID, todayDate)
+			if err != nil {
+				nonFatalError(err)
+			}
+
+			var tasks []tudoProjectAction
+			for rows.Next() {
+				var t tudoProjectAction
+				if err := rows.Scan(&t.ID, &t.Task, &t.Project, &t.Due, &t.Done, &t.CreatedAt); err != nil {
+					nonFatalError(err)
+				}
+				tasks = append(tasks, t)
+			}
+			if len(tasks) == 0 {
+				fmt.Println("No tasks for project `" + projectName + "` today")
+			}
+			for _, t := range tasks {
+				fmt.Print("- " + t.Format())
+			}
+		}
 	}
 }
