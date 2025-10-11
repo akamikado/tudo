@@ -165,6 +165,8 @@ func ParseArgs(dbFile string) {
 				}
 
 				fmt.Println("Project `" + projectName + "` has been created")
+			case "wait":
+				Todo("wait")
 			default:
 				projectName := ""
 				for i := 2; i < len(cmdArgs); i++ {
@@ -316,8 +318,6 @@ func ParseArgs(dbFile string) {
 		for _, c := range captureList {
 			fmt.Print(c.Format())
 		}
-	case "wait":
-		Todo("wait")
 	case "waiting":
 		Todo("waiting")
 	case "someday":
