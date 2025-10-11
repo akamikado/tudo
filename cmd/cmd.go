@@ -1,11 +1,14 @@
 package cmd
 
 import (
+	"bufio"
 	"database/sql"
 	"errors"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
 	"time"
 
 	"tudo/database"
@@ -111,7 +114,34 @@ func ParseArgs(dbFile string) {
 
 	case "new":
 		if len(cmdArgs) == 2 {
-			Todo("new capture")
+			fmt.Println("Capture started (<Ctrl-c> on a new line to stop capture)")
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGINT)
+			done := make(chan bool, 1)
+
+			go func() {
+				<-sigChan
+				done <- true
+			}()
+
+			capturing := true
+			captureTxt := ""
+			scanner := bufio.NewScanner(os.Stdin)
+			for capturing {
+				select {
+				case <-done:
+					capturing = false
+				default:
+					if scanner.Scan() {
+						captureTxt = captureTxt + scanner.Text() + "\n"
+					} else {
+						capturing = false
+					}
+				}
+			}
+			if _, err := db.Exec("INSERT INTO capture (id, content, done, created_at) VALUES (NULL, ?, 0, datetime());", captureTxt); err != nil {
+				nonFatalError(err)
+			}
 		} else if len(cmdArgs) > 2 {
 			switch cmdArgs[2] {
 			case "next":
@@ -176,7 +206,26 @@ func ParseArgs(dbFile string) {
 		}
 		switch cmdArgs[2] {
 		case "in":
-			Todo("in done")
+			captureID, err := strconv.Atoi(cmdArgs[3])
+			if err != nil {
+				nonFatalError(invalidCommandFormat)
+			}
+
+			r, err := db.Exec("UPDATE capture SET done = 1 WHERE id = ?", captureID)
+			if err != nil {
+				nonFatalError(err)
+			}
+
+			rows, err := r.RowsAffected()
+			if err != nil {
+				nonFatalError(err)
+			}
+
+			if rows == 0 {
+				fmt.Println("Capture item `" + cmdArgs[3] + "` does not exist")
+			} else {
+				fmt.Println("Marked capture item `" + cmdArgs[3] + "` as finished\n")
+			}
 		case "next":
 			actionID, err := strconv.Atoi(cmdArgs[3])
 			if err != nil {
@@ -245,7 +294,28 @@ func ParseArgs(dbFile string) {
 			}
 		}
 	case "in":
-		Todo("in")
+		rows, err := db.Query("SELECT id, content FROM capture WHERE done == 0")
+		if err != nil {
+			nonFatalError(err)
+		}
+		defer rows.Close()
+
+		var captureList []tudoCapture
+		for rows.Next() {
+			var c tudoCapture
+			if err := rows.Scan(&c.ID, &c.Content); err != nil {
+				nonFatalError(err)
+			}
+			captureList = append(captureList, c)
+		}
+
+		if len(captureList) == 0 {
+			fmt.Println("No next actions for now")
+		}
+
+		for _, c := range captureList {
+			fmt.Print(c.Format())
+		}
 	case "wait":
 		Todo("wait")
 	case "waiting":
