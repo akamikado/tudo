@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS someday (
   id INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL,
   done INTEGER NOT NULL,
-  created_at TEXT NOT NULL,
+  created_at TEXT NOT NULL
 );
 `
 
