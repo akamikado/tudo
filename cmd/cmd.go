@@ -93,7 +93,7 @@ func (p *tudoProject) Format() string {
 	return p.Content + "\n"
 }
 
-type tudoSomeday struct {
+type tudoSomedayAction struct {
 	ID        uint32
 	Content   string
 	Done      bool
@@ -113,18 +113,31 @@ func somedayTaskExists(db *sql.DB, content string) (bool, uint32) {
 	return true, id
 }
 
-func (s *tudoSomeday) Format() string {
+func (s *tudoSomedayAction) Format() string {
 	return fmt.Sprint("ID: ", s.ID, "\n", s.Content, "\n")
 }
 
-type tudoWaiting struct {
+type tudoWaitingAction struct {
 	ID        uint32
 	Content   string
 	Done      bool
 	CreatedAt string
 }
 
-func (w *tudoWaiting) Format() string {
+func waitingActionExists(db *sql.DB, content string) (bool, uint32) {
+	row := db.QueryRow("SELECT id FROM waiting WHERE content = ? AND done = 0", content)
+	var id uint32
+	err := row.Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, 0
+	} else if err != nil {
+		nonFatalError(err)
+	}
+
+	return true, id
+}
+
+func (w *tudoWaitingAction) Format() string {
 	return fmt.Sprint("ID: ", w.ID, "\n", w.Content, "\n")
 }
 
@@ -267,18 +280,23 @@ func ParseArgs(dbFile string) {
 			case "wait":
 				fmt.Print("Please enter new task to wait for: ")
 				reader := bufio.NewReader(os.Stdin)
-				waitTask, _ := reader.ReadString('\n')
-				if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", strings.TrimSpace(waitTask)); err != nil {
+				waitAction, _ := reader.ReadString('\n')
+				waitAction = strings.TrimSpace(waitAction)
+				if exists, _ := waitingActionExists(db, waitAction); exists {
+					fmt.Println("Waiting action `" + waitAction + "` already exists")
+					return
+				}
+				if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", waitAction); err != nil {
 					nonFatalError(err)
 				}
-				fmt.Println("Created new task to wait for")
+				fmt.Println("Created new wait action")
 			case "someday":
 				fmt.Print("Please enter new project name: ")
 				reader := bufio.NewReader(os.Stdin)
 				futureTask, _ := reader.ReadString('\n')
 				futureTask = strings.TrimSpace(futureTask)
 				if exists, _ := somedayTaskExists(db, futureTask); exists {
-					fmt.Println("Someday task `" + futureTask + "` already exists")
+					fmt.Println("Someday action `" + futureTask + "` already exists")
 					return
 				}
 
@@ -286,7 +304,7 @@ func ParseArgs(dbFile string) {
 					nonFatalError(err)
 				}
 
-				fmt.Println("Someday task `" + futureTask + "` has been created")
+				fmt.Println("Someday action `" + futureTask + "` has been created")
 			default:
 				projectName := ""
 				for i := 2; i < len(cmdArgs); i++ {
@@ -391,11 +409,11 @@ func ParseArgs(dbFile string) {
 				nonFatalError(invalidCommandFormat)
 			}
 
-			var futureTask tudoSomeday
+			var futureTask tudoSomedayAction
 			row := db.QueryRow("SELECT id, content, done, created_at FROM someday WHERE id = ? AND done = 0", id)
 			err = row.Scan(&futureTask.ID, &futureTask.Content, &futureTask.Done, &futureTask.CreatedAt)
 			if errors.Is(err, sql.ErrNoRows) {
-				nonFatalError(errors.New("Someday task `" + cmdArgs[3] + "` does not exist"))
+				nonFatalError(errors.New("Someday action `" + cmdArgs[3] + "` does not exist"))
 			}
 
 			if _, err := db.Exec("UPDATE someday SET done = 1 WHERE id = ?", id); err != nil {
@@ -450,11 +468,11 @@ func ParseArgs(dbFile string) {
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
-			var waitingTask tudoWaiting
+			var waitingTask tudoWaitingAction
 			row := db.QueryRow("SELECT id, content, done, created_at FROM waiting WHERE id = ? AND done = 0", id)
 			err = row.Scan(&waitingTask.ID, &waitingTask.Content, &waitingTask.Done, &waitingTask.CreatedAt)
 			if errors.Is(err, sql.ErrNoRows) {
-				nonFatalError(errors.New("Waiting task `" + cmdArgs[3] + "` does not exist"))
+				nonFatalError(errors.New("Waiting action `" + cmdArgs[3] + "` does not exist"))
 			}
 
 			if _, err := db.Exec("UPDATE waiting SET done = 1 WHERE id = ?", id); err != nil {
@@ -532,9 +550,9 @@ func ParseArgs(dbFile string) {
 		if err != nil {
 			nonFatalError(err)
 		}
-		var waitList []tudoWaiting
+		var waitList []tudoWaitingAction
 		for rows.Next() {
-			var w tudoWaiting
+			var w tudoWaitingAction
 			if err := rows.Scan(&w.ID, &w.Content, &w.Done, &w.CreatedAt); err != nil {
 				nonFatalError(err)
 			}
@@ -551,9 +569,9 @@ func ParseArgs(dbFile string) {
 		if err != nil {
 			nonFatalError(err)
 		}
-		var futureTasks []tudoSomeday
+		var futureTasks []tudoSomedayAction
 		for rows.Next() {
-			var s tudoSomeday
+			var s tudoSomedayAction
 			if err := rows.Scan(&s.ID, &s.Content, &s.Done, &s.CreatedAt); err != nil {
 				nonFatalError(err)
 			}
@@ -591,9 +609,9 @@ func ParseArgs(dbFile string) {
 			if err != nil {
 				nonFatalError(err)
 			}
-			var futureTasks []tudoSomeday
+			var futureTasks []tudoSomedayAction
 			for rows.Next() {
-				var t tudoSomeday
+				var t tudoSomedayAction
 				if err := rows.Scan(&t.ID, &t.Content); err != nil {
 					nonFatalError(err)
 				}
