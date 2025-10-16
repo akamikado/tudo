@@ -52,7 +52,7 @@ CREATE TABLE IF NOT EXISTS waiting (
   content TEXT NOT NULL,
   done INTEGER NOT NULL,
   created_at TEXT NOT NULL,
-  finished_at TEXT,
+  finished_at TEXT
 );
 `
 
