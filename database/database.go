@@ -18,7 +18,8 @@ CREATE TABLE IF NOT EXISTS next_actions (
   id INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL,
   done INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  finished_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS tasks (
@@ -27,14 +28,16 @@ CREATE TABLE IF NOT EXISTS tasks (
   project_id INTEGER NOT NULL,
   due TEXT NOT NULL,
   done INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  finished_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS projects (
   id INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL,
   done INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  finished_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS someday (
@@ -48,7 +51,8 @@ CREATE TABLE IF NOT EXISTS waiting (
   id INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL,
   done INTEGER NOT NULL,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  finished_at TEXT,
 );
 `
 

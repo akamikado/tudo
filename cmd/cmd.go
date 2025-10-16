@@ -42,38 +42,41 @@ type tudoCapture struct {
 }
 
 func (c *tudoCapture) Format() string {
-	return "ID: " + fmt.Sprint(c.ID) + "\n" + c.Content + "\n"
+	return fmt.Sprint("ID: ", c.ID, "\n", c.Content, "\n")
 }
 
 type tudoNextAction struct {
-	ID        uint32
-	Content   string
-	Done      bool
-	CreatedAt string
+	ID         uint32
+	Content    string
+	Done       bool
+	CreatedAt  string
+	FinishedAt string
 }
 
 func (a *tudoNextAction) Format() string {
-	return "ID: " + fmt.Sprint(a.ID) + "\n" + a.Content + "\n"
+	return fmt.Sprint("ID: ", a.ID, "\n", a.Content, "\n")
 }
 
 type tudoProjectAction struct {
-	ID        uint32
-	Content   string
-	Project   uint32
-	Due       string
-	Done      bool
-	CreatedAt string
+	ID         uint32
+	Content    string
+	Project    uint32
+	Due        string
+	Done       bool
+	CreatedAt  string
+	FinishedAt string
 }
 
 func (a *tudoProjectAction) Format() string {
-	return "ID: " + fmt.Sprint(a.ID) + "\n" + a.Content + "\nDue: " + a.Due + "\n"
+	return fmt.Sprint("ID: ", a.ID, "\n", a.Content, "\nDue: ", a.Due, "\n")
 }
 
 type tudoProject struct {
-	ID        uint32
-	Content   string
-	Done      bool
-	CreatedAt string
+	ID         uint32
+	Content    string
+	Done       bool
+	CreatedAt  string
+	FinishedAt string
 }
 
 func projectExists(db *sql.DB, content string) (bool, uint32) {
@@ -118,10 +121,11 @@ func (s *tudoSomedayAction) Format() string {
 }
 
 type tudoWaitingAction struct {
-	ID        uint32
-	Content   string
-	Done      bool
-	CreatedAt string
+	ID         uint32
+	Content    string
+	Done       bool
+	CreatedAt  string
+	FinishedAt string
 }
 
 func waitingActionExists(db *sql.DB, content string) (bool, uint32) {
@@ -259,7 +263,7 @@ func ParseArgs(dbFile string) {
 				fmt.Print("Please enter new next action: ")
 				reader := bufio.NewReader(os.Stdin)
 				task, _ := reader.ReadString('\n')
-				if _, err := db.Exec("INSERT INTO next_actions (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", strings.TrimSpace(task)); err != nil {
+				if _, err := db.Exec("INSERT INTO next_actions (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, datetime(), NULL)", strings.TrimSpace(task)); err != nil {
 					nonFatalError(err)
 				}
 				fmt.Println("Created new next action")
@@ -272,7 +276,7 @@ func ParseArgs(dbFile string) {
 					return
 				}
 
-				if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at) VALUES (NULL, ?, 0, date())", projectName); err != nil {
+				if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", projectName); err != nil {
 					nonFatalError(err)
 				}
 
@@ -286,7 +290,7 @@ func ParseArgs(dbFile string) {
 					fmt.Println("Waiting action `" + waitAction + "` already exists")
 					return
 				}
-				if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", waitAction); err != nil {
+				if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, datetime(), NULL)", waitAction); err != nil {
 					nonFatalError(err)
 				}
 				fmt.Println("Created new wait action")
@@ -342,7 +346,7 @@ func ParseArgs(dbFile string) {
 				if due.Before(time.Date(yyyy, mm, dd, 0, 0, 0, 0, time.Now().Location())) {
 					nonFatalError(errors.New("due date has passed already"))
 				}
-				if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, due, done, created_at) VALUES (NULL, ?, ?, ?, 0, datetime())", task, projectID, due.Format("2006-01-02")); err != nil {
+				if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, due, done, created_at, finished_at) VALUES (NULL, ?, ?, ?, 0, datetime(), NULL)", task, projectID, due.Format("2006-01-02")); err != nil {
 					nonFatalError(err)
 				}
 				fmt.Println("New task created for `" + projectName + "`")
@@ -440,7 +444,7 @@ func ParseArgs(dbFile string) {
 						return
 					}
 
-					if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at) VALUES (NULL, ?, 0, date())", projectName); err != nil {
+					if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, datetime(), NULL)", projectName); err != nil {
 						nonFatalError(err)
 					}
 
@@ -451,7 +455,7 @@ func ParseArgs(dbFile string) {
 						return
 					}
 
-					if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", futureTask.Content); err != nil {
+					if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, datetime(), NULL)", futureTask.Content); err != nil {
 						nonFatalError(err)
 					}
 				default:
