@@ -194,11 +194,11 @@ func ParseArgs(dbFile string) {
 		return
 	}
 	switch cmdArgs[1] {
-	case "help":
-		fallthrough
 	case "-h":
 		fallthrough
 	case "--help":
+		fmt.Println("For help, use `" + cmdArgs[0] + " help`")
+	case "help":
 		Todo("help")
 
 	case "new":
