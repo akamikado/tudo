@@ -24,6 +24,7 @@ func main() {
 			fmt.Println("Could not create .tudo directory")
 			os.Exit(1)
 		}
+		fmt.Println("Created directory `" + tudoDir + "`")
 	} else if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)
@@ -42,6 +43,7 @@ func main() {
 			fmt.Println("Could not setup database :" + err.Error())
 			os.Exit(1)
 		}
+		fmt.Println("Finished setting up sqlite db file `" + dbFile + "`")
 	} else if err != nil {
 		fmt.Println(err.Error())
 		os.Exit(1)

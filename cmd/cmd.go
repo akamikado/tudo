@@ -117,6 +117,17 @@ func (s *tudoSomeday) Format() string {
 	return fmt.Sprint("ID: ", s.ID, "\n", s.Content, "\n")
 }
 
+type tudoWaiting struct {
+	ID        uint32
+	Content   string
+	Done      bool
+	CreatedAt string
+}
+
+func (w *tudoWaiting) Format() string {
+	return fmt.Sprint("ID: ", w.ID, "\n", w.Content, "\n")
+}
+
 func ParseArgs(dbFile string) {
 	db, err := database.Connect(dbFile)
 	if err != nil {
@@ -254,7 +265,13 @@ func ParseArgs(dbFile string) {
 
 				fmt.Println("Project `" + projectName + "` has been created")
 			case "wait":
-				Todo("wait")
+				fmt.Print("Please enter new task to wait for: ")
+				reader := bufio.NewReader(os.Stdin)
+				waitTask, _ := reader.ReadString('\n')
+				if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at) VALUES (NULL, ?, 0, datetime())", strings.TrimSpace(waitTask)); err != nil {
+					nonFatalError(err)
+				}
+				fmt.Println("Created new task to wait for")
 			case "someday":
 				fmt.Print("Please enter new project name: ")
 				reader := bufio.NewReader(os.Stdin)
@@ -425,6 +442,26 @@ func ParseArgs(dbFile string) {
 			default:
 				nonFatalError(invalidCommand)
 			}
+		case "waiting":
+			if len(cmdArgs) < 3 {
+				nonFatalError(invalidCommandFormat)
+			}
+			id, err := strconv.Atoi(cmdArgs[3])
+			if err != nil {
+				nonFatalError(invalidCommandFormat)
+			}
+			var waitingTask tudoWaiting
+			row := db.QueryRow("SELECT id, content, done, created_at FROM waiting WHERE id = ? AND done = 0", id)
+			err = row.Scan(&waitingTask.ID, &waitingTask.Content, &waitingTask.Done, &waitingTask.CreatedAt)
+			if errors.Is(err, sql.ErrNoRows) {
+				nonFatalError(errors.New("Waiting task `" + cmdArgs[3] + "` does not exist"))
+			}
+
+			if _, err := db.Exec("UPDATE waiting SET done = 1 WHERE id = ?", id); err != nil {
+				nonFatalError(err)
+			}
+
+			fmt.Println("Marked waiting task `" + cmdArgs[3] + "` as done")
 		default:
 			projectName := ""
 			for i := 2; i < len(cmdArgs)-1; i++ {
@@ -491,7 +528,24 @@ func ParseArgs(dbFile string) {
 			fmt.Print(c.Format())
 		}
 	case "waiting":
-		Todo("waiting")
+		rows, err := db.Query("SELECT id, content, done, created_at FROM waiting WHERE done = 0")
+		if err != nil {
+			nonFatalError(err)
+		}
+		var waitList []tudoWaiting
+		for rows.Next() {
+			var w tudoWaiting
+			if err := rows.Scan(&w.ID, &w.Content, &w.Done, &w.CreatedAt); err != nil {
+				nonFatalError(err)
+			}
+			waitList = append(waitList, w)
+		}
+		if len(waitList) == 0 {
+			fmt.Println("No tasks to wait for now")
+		}
+		for _, w := range waitList {
+			fmt.Println("- " + w.Format())
+		}
 	case "someday":
 		rows, err := db.Query("SELECT id, content, done, created_at FROM someday WHERE done = 0")
 		if err != nil {

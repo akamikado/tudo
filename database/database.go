@@ -43,6 +43,13 @@ CREATE TABLE IF NOT EXISTS someday (
   done INTEGER NOT NULL,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS waiting (
+  id INTEGER NOT NULL PRIMARY KEY,
+  content TEXT NOT NULL,
+  done INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
 `
 
 func Setup(dbFile string) error {
