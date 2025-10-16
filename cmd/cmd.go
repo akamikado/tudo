@@ -667,11 +667,32 @@ func ParseArgs(dbFile string) {
 	case "edit":
 		Todo("edit")
 	case "clean":
-		row := db.QueryRow("SELECT COUNT(*) FROM next_actions WHERE done = 0")
+		row := db.QueryRow("SELECT COUNT(*) FROM capture WHERE done = 0")
 		if row.Err() != nil {
 			nonFatalError(row.Err())
 		}
 		var cnt int
+		row.Scan(&cnt)
+		if cnt > 0 {
+			fmt.Println(fmt.Sprint("You will be cleaning out `", cnt, "` items from in list. Continue? (y/n)"))
+			var ans string
+			fmt.Scanln(&ans)
+			switch ans {
+			case "n":
+				break
+			case "y":
+				if _, err := db.Exec("UPDATE capture SET done = 1 WHERE done = 0"); err != nil {
+					nonFatalError(err)
+				}
+				fmt.Println(fmt.Sprint("Cleaned `", cnt, "` items from in list"))
+			default:
+				nonFatalError(invalidCommand)
+			}
+		}
+		row = db.QueryRow("SELECT COUNT(*) FROM next_actions WHERE done = 0")
+		if row.Err() != nil {
+			nonFatalError(row.Err())
+		}
 		row.Scan(&cnt)
 		if cnt > 0 {
 			fmt.Println(fmt.Sprint("You will be cleaning out `", cnt, "` next actions. Continue? (y/n)"))
@@ -681,7 +702,7 @@ func ParseArgs(dbFile string) {
 			case "n":
 				break
 			case "y":
-				if _, err := db.Exec("UPDATE next_actions SET done = 1 WHERE done = 0"); err != nil {
+				if _, err := db.Exec("UPDATE next_actions SET done = 1, finished_at = date() WHERE done = 0"); err != nil {
 					nonFatalError(err)
 				}
 				fmt.Println(fmt.Sprint("Cleaned `", cnt, "` next actions"))
@@ -699,7 +720,7 @@ func ParseArgs(dbFile string) {
 			case "n":
 				break
 			case "y":
-				if _, err := db.Exec("UPDATE tasks SET done = 1 WHERE done = 0 AND project_id IN (SELECT id FROM projects WHERE done = 0)"); err != nil {
+				if _, err := db.Exec("UPDATE tasks SET done = 1, finished_at = date() WHERE done = 0 AND project_id IN (SELECT id FROM projects WHERE done = 0)"); err != nil {
 					nonFatalError(err)
 				}
 				fmt.Println(fmt.Sprint("Cleaned `", cnt, "` tasks"))
