@@ -384,7 +384,7 @@ func ParseArgs(dbFile string) {
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
-			r, err := db.Exec("UPDATE next_actions SET done = 1 WHERE id = ?", actionID)
+			r, err := db.Exec("UPDATE next_actions SET done = 1, finished_at = datetime() WHERE id = ?", actionID)
 			if err != nil {
 				nonFatalError(err)
 			}
@@ -479,7 +479,7 @@ func ParseArgs(dbFile string) {
 				nonFatalError(errors.New("Waiting action `" + cmdArgs[3] + "` does not exist"))
 			}
 
-			if _, err := db.Exec("UPDATE waiting SET done = 1 WHERE id = ?", id); err != nil {
+			if _, err := db.Exec("UPDATE waiting SET done = 1, finished_at = datetime() WHERE id = ?", id); err != nil {
 				nonFatalError(err)
 			}
 
@@ -500,7 +500,7 @@ func ParseArgs(dbFile string) {
 					return
 				}
 
-				if _, err := db.Exec("UPDATE projects SET done = 1 WHERE content = ? AND done = 0", projectName); err != nil {
+				if _, err := db.Exec("UPDATE projects SET done = 1, finished_at = datetime() WHERE content = ? AND done = 0", projectName); err != nil {
 					nonFatalError(err)
 				}
 				fmt.Println("Finished project `" + projectName + "`\n")
@@ -511,7 +511,7 @@ func ParseArgs(dbFile string) {
 					return
 				}
 
-				res, err := db.Exec("UPDATE tasks SET done = 1 WHERE id = ? AND project_id = ?", taskID, projectID)
+				res, err := db.Exec("UPDATE tasks SET done = 1, finished_at = datetime() WHERE id = ? AND project_id = ?", taskID, projectID)
 				if err != nil {
 					nonFatalError(err)
 				}
