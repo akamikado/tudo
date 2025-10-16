@@ -114,7 +114,7 @@ func somedayTaskExists(db *sql.DB, content string) (bool, uint32) {
 }
 
 func (s *tudoSomeday) Format() string {
-	return s.Content + "\n"
+	return fmt.Sprint("ID: ", s.ID, "\n", s.Content, "\n")
 }
 
 func ParseArgs(dbFile string) {
@@ -257,8 +257,9 @@ func ParseArgs(dbFile string) {
 				Todo("wait")
 			case "someday":
 				fmt.Print("Please enter new project name: ")
-				var futureTask string
-				fmt.Scan(&futureTask)
+				reader := bufio.NewReader(os.Stdin)
+				futureTask, _ := reader.ReadString('\n')
+				futureTask = strings.TrimSpace(futureTask)
 				if exists, _ := somedayTaskExists(db, futureTask); exists {
 					fmt.Println("Someday task `" + futureTask + "` already exists")
 					return
@@ -380,7 +381,7 @@ func ParseArgs(dbFile string) {
 				nonFatalError(errors.New("Someday task `" + cmdArgs[3] + "` does not exist"))
 			}
 
-			if _, err := db.Exec("UPDATE projects SET done = 1 WHERE id = ? AND done = 0", id); err != nil {
+			if _, err := db.Exec("UPDATE someday SET done = 1 WHERE id = ?", id); err != nil {
 				nonFatalError(err)
 			}
 
@@ -511,7 +512,47 @@ func ParseArgs(dbFile string) {
 			fmt.Print("- " + s.Format())
 		}
 	case "read":
-		Todo("read")
+		rows, err := db.Query("SELECT tasks.id, tasks.content, tasks.project_id, tasks.due, tasks.done, tasks.created_at, projects.id, projects.content due FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 AND tasks.done = 0 AND tasks.content LIKE '%read %' GROUP BY tasks.project_id")
+		if err != nil {
+			nonFatalError(err)
+		}
+		tasks := make(map[tudoProject][]tudoProjectAction)
+		for rows.Next() {
+			var project tudoProject
+			var task tudoProjectAction
+			if err := rows.Scan(&task.ID, &task.Content, &task.Project, &task.Due, &task.Done, &task.CreatedAt, &project.ID, &project.Content); err != nil {
+				nonFatalError(err)
+			}
+			tasks[project] = append(tasks[project], task)
+		}
+		if len(tasks) > 0 {
+			for project, projectTasks := range tasks {
+				fmt.Println(project.Content)
+				for _, t := range projectTasks {
+					fmt.Println("- " + t.Format())
+				}
+			}
+		} else {
+			rows, err = db.Query("SELECT id, content FROM someday WHERE done = 0 AND content LIKE '%read %'")
+			if err != nil {
+				nonFatalError(err)
+			}
+			var futureTasks []tudoSomeday
+			for rows.Next() {
+				var t tudoSomeday
+				if err := rows.Scan(&t.ID, &t.Content); err != nil {
+					nonFatalError(err)
+				}
+				futureTasks = append(futureTasks, t)
+			}
+			if len(futureTasks) == 0 {
+				fmt.Println("Nothing to read for now")
+			} else {
+				for _, t := range futureTasks {
+					fmt.Println("- " + t.Format())
+				}
+			}
+		}
 	case "next":
 		rows, err := db.Query("SELECT id, content FROM next_actions WHERE done == 0")
 		if err != nil {
