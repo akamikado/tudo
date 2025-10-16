@@ -663,7 +663,33 @@ func ParseArgs(dbFile string) {
 			fmt.Print(a.Format())
 		}
 	case "all":
-		Todo("all")
+		if len(cmdArgs) == 2 {
+			Todo("all displaying next actions, waiting list and all tasks")
+		} else {
+			projectName := ""
+			for i := 2; i < len(cmdArgs); i++ {
+				if i > 2 {
+					projectName += " "
+				}
+				projectName += cmdArgs[i]
+			}
+			exists, projectID := projectExists(db, projectName)
+			if !exists {
+				fmt.Println("No active project `" + projectName + "` exists\n")
+			}
+
+			rows, err := db.Query("SELECT id, content, project_id, due FROM tasks WHERE project_id = ? AND done = 0", projectID)
+			if err != nil {
+				nonFatalError(err)
+			}
+			for rows.Next() {
+				var t tudoProjectAction
+				if err := rows.Scan(&t.ID, &t.Content, &t.Project, &t.Due); err != nil {
+					nonFatalError(err)
+				}
+				fmt.Println("- " + t.Format())
+			}
+		}
 	case "edit":
 		Todo("edit")
 	case "clean":
@@ -910,7 +936,7 @@ func ParseArgs(dbFile string) {
 		} else {
 			projectName := ""
 			for i := 1; i < len(cmdArgs); i++ {
-				if i > 2 {
+				if i > 1 {
 					projectName += " "
 				}
 				projectName += cmdArgs[i]
