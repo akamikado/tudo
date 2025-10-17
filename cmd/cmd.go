@@ -55,31 +55,20 @@ func (c *tudoCapture) Format() string {
 	return fmt.Sprint("ID: ", c.ID, "\n", c.Content, "\n")
 }
 
-type tudoNextAction struct {
+type tudoTask struct {
 	ID         uint32
 	Content    string
+	ProjectID  *uint32
+	Context    *string
+	Due        *string
 	Done       bool
 	CreatedAt  string
 	FinishedAt *string
 }
 
-func (a *tudoNextAction) Format() string {
-	return fmt.Sprint("ID: ", a.ID, "\n", a.Content, "\n")
-}
-
-type tudoProjectAction struct {
-	ID         uint32
-	Content    string
-	ProjectID  uint32
-	Context    string
-	Due        string
-	Done       bool
-	CreatedAt  string
-	FinishedAt *string
-}
-
-func (a *tudoProjectAction) Format() string {
-	return fmt.Sprint("ID: ", a.ID, "\n", a.Content, "\nDue: ", a.Due, "\nContext: ", a.Context)
+type tudoContext struct {
+	ID      uint32
+	Content string
 }
 
 type tudoProject struct {
@@ -167,16 +156,16 @@ func ParseArgs(dbFile string) {
 	cmdArgs := os.Args
 	if len(cmdArgs) == 1 {
 		noTasks := true
-		rows, err := db.Query("SELECT id, content FROM next_actions WHERE done == 0")
+		rows, err := db.Query("SELECT id, content, context FROM tasks WHERE done == 0 AND project_id IS NULL GROUP BY context")
 		if err != nil {
 			fatalError(err)
 		}
 		defer rows.Close()
 
-		var nextActions []tudoNextAction
+		var nextActions []tudoTask
 		for rows.Next() {
-			var action tudoNextAction
-			if err := rows.Scan(&action.ID, &action.Content); err != nil {
+			var action tudoTask
+			if err := rows.Scan(&action.ID, &action.Content, &action.Context); err != nil {
 				fatalError(err)
 			}
 			nextActions = append(nextActions, action)
@@ -184,17 +173,22 @@ func ParseArgs(dbFile string) {
 
 		if len(nextActions) > 0 {
 			noTasks = false
-			fmt.Println("Next Actions")
+			fmt.Println("NEXT ACTIONS")
 		}
 		for _, a := range nextActions {
-			fmt.Print(a.Format())
+			fmt.Print(fmt.Sprint("- ID: ", a.ID, "\n", a.Content, "\n"))
+			if a.Context != nil {
+				fmt.Print(fmt.Sprint("Context: ", *a.Context, "\n"))
+			}
 		}
 
 		rows, err = db.Query("SELECT id, content, done, created_at FROM projects WHERE done = 0")
 		if err != nil {
 			fatalError(err)
 		}
-		defer rows.Close()
+
+		fmt.Println("\nPROJECTS")
+
 		var projects []tudoProject
 		for rows.Next() {
 			var p tudoProject
@@ -204,28 +198,51 @@ func ParseArgs(dbFile string) {
 			projects = append(projects, p)
 		}
 
-		now := time.Now()
-		todayDate := now.Format("2006-01-02")
+		yyyy, mm, dd := time.Now().Date()
+		todayDate := time.Date(yyyy, mm, dd, 0, 0, 0, 0, time.Now().Location())
+
 		for _, project := range projects {
-			rows, err := db.Query("SELECT id, content, project_id, context, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", project.ID, todayDate)
+			rows, err := db.Query("SELECT id, content, project_id, context, due, done FROM tasks WHERE project_id = ? AND done = 0", project.ID)
 			if err != nil {
 				fatalError(err)
 			}
+			defer rows.Close()
 
-			var tasks []tudoProjectAction
+			var calendarTasks []tudoTask
+			var nonCalendarTasks []tudoTask
 			for rows.Next() {
-				var t tudoProjectAction
-				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due, &t.Done, &t.CreatedAt); err != nil {
+				var t tudoTask
+				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due, &t.Done); err != nil {
 					fatalError(err)
 				}
-				tasks = append(tasks, t)
+				if t.Due != nil {
+					due, err := time.ParseInLocation("2006-01-02", *t.Due, time.Now().Location())
+					if err != nil {
+						fatalError(err)
+					}
+					if todayDate.Equal(due) {
+						calendarTasks = append(calendarTasks, t)
+					}
+				} else {
+					nonCalendarTasks = append(nonCalendarTasks, t)
+				}
 			}
-			if len(tasks) > 0 {
+			if len(calendarTasks) > 0 || len(nonCalendarTasks) > 0 {
 				noTasks = false
-				fmt.Print("\n" + project.Content + "\n")
+				fmt.Println(project.Content)
 			}
-			for _, t := range tasks {
-				fmt.Print("- " + t.Format())
+			for _, t := range calendarTasks {
+				fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+				if t.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+				}
+				fmt.Print(fmt.Sprint("Due: ", *t.Due, "\n"))
+			}
+			for _, t := range nonCalendarTasks {
+				fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+				if t.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+				}
 			}
 		}
 		if noTasks {
@@ -242,121 +259,193 @@ func ParseArgs(dbFile string) {
 		Todo("help")
 
 	case "new":
-		if len(cmdArgs) > 2 {
-			switch cmdArgs[2] {
-			case "in":
-				fmt.Println("Capture started (<Ctrl-c> on a new line to stop capture)")
-				sigChan := make(chan os.Signal, 1)
-				signal.Notify(sigChan, syscall.SIGINT)
-				done := make(chan bool, 1)
+		if len(cmdArgs) == 2 {
+			nonFatalError(invalidCommandFormat)
+		}
 
-				go func() {
-					<-sigChan
-					done <- true
-				}()
+		rows, err := db.Query("SELECT id, content FROM contexts")
+		if err != nil {
+			fatalError(err)
+		}
+		contextMap := make(map[uint32]string)
+		for rows.Next() {
+			var c tudoContext
+			if err := rows.Scan(&c.ID, &c.Content); err != nil {
+				fatalError(err)
+			}
+			contextMap[c.ID] = c.Content
+		}
 
-				capturing := true
-				captureTxt := ""
-				reader := bufio.NewReader(os.Stdin)
-				for capturing {
-					select {
-					case <-done:
-						capturing = false
-					default:
-						line, _ := reader.ReadString('\n')
-						captureTxt = captureTxt + strings.TrimSpace(line) + "\n"
-					}
+		reader := bufio.NewReader(os.Stdin)
+
+		switch cmdArgs[2] {
+		case "in":
+			fmt.Println("Capture started (<Ctrl-c> on a new line to stop capture)")
+			sigChan := make(chan os.Signal, 1)
+			signal.Notify(sigChan, syscall.SIGINT)
+			done := make(chan bool, 1)
+
+			go func() {
+				<-sigChan
+				done <- true
+			}()
+
+			capturing := true
+			captureTxt := ""
+			for capturing {
+				select {
+				case <-done:
+					capturing = false
+				default:
+					line, _ := reader.ReadString('\n')
+					captureTxt = captureTxt + line + "\n"
 				}
-				if _, err := db.Exec("INSERT INTO capture (id, content, done, created_at) VALUES (NULL, ?, 0, date());", captureTxt); err != nil {
+			}
+			if _, err := db.Exec("INSERT INTO capture (id, content, done, created_at) VALUES (NULL, ?, 0, date());", captureTxt); err != nil {
+				fatalError(err)
+			}
+			fmt.Println("Created new capture")
+
+		case "next":
+			fmt.Print("Please enter new next action: ")
+			task, _ := reader.ReadString('\n')
+			task = strings.TrimSpace(task)
+
+			fmt.Println("Select context (Press ENTER if no context): ")
+			for k, v := range contextMap {
+				fmt.Println(fmt.Sprint(k, ". ", v, "\n"))
+			}
+
+			number, _ := reader.ReadString('\n')
+			number = strings.TrimSpace(number)
+
+			if number == "" {
+				if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, context, due, done, created_at, finished_at) VALUES (NULL, ?, NULL, NULL, NULL, 0, date(), NULL)", task); err != nil {
 					fatalError(err)
 				}
-				fmt.Println("Created new capture")
-			case "next":
-				fmt.Print("Please enter new next action: ")
-				reader := bufio.NewReader(os.Stdin)
-				task, _ := reader.ReadString('\n')
-				if _, err := db.Exec("INSERT INTO next_actions (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, date(), NULL)", strings.TrimSpace(task)); err != nil {
+			} else {
+				contextID, err := strconv.Atoi(number)
+				if err != nil {
+					nonFatalError(invalidCommandFormat)
+				}
+				if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, context, due, done, created_at, finished_at) VALUES (NULL, ?, NULL, ?, NULL, 0, date(), NULL)", task, contextMap[uint32(contextID)]); err != nil {
 					fatalError(err)
 				}
-				fmt.Println("Created new next action")
-			case "project":
-				fmt.Print("Please enter new project name: ")
-				var projectName string
-				fmt.Scan(&projectName)
-				if exists, _ := projectExists(db, projectName); exists {
-					fmt.Println("Project `" + projectName + "` already exists")
-					return
+			}
+			fmt.Println("Created new next action")
+
+		case "project":
+			fmt.Print("Please enter new project name: ")
+			projectName, _ := reader.ReadString('\n')
+			projectName = strings.TrimSpace(projectName)
+
+			if exists, _ := projectExists(db, projectName); exists {
+				fmt.Println("Project `" + projectName + "` already exists")
+				return
+			}
+
+			if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at) VALUES (NULL, ?, 0, date())", projectName); err != nil {
+				fatalError(err)
+			}
+
+			fmt.Println("Project `" + projectName + "` has been created")
+
+		case "context":
+			fmt.Println("Currently available contexts: ")
+			for k, v := range contextMap {
+				fmt.Println(fmt.Sprint(k, ". ", v, "\n"))
+			}
+			fmt.Println("New context: ")
+			context, _ := reader.ReadString('\n')
+			context = strings.TrimSpace(context)
+
+			for _, v := range contextMap {
+				if v == context {
+					nonFatalError(errors.New("Context `" + context + "` already exists"))
 				}
+			}
 
-				if _, err := db.Exec("INSERT INTO projects (id, content, done, created_at) VALUES (NULL, ?, 0, date())", projectName); err != nil {
-					fatalError(err)
+			if _, err := db.Exec("INSERT INTO contexts (id, content) VALUES (NULL, ?)", context); err != nil {
+				fatalError(err)
+			}
+			fmt.Println("Created new context `" + context + "`")
+
+		case "wait":
+			fmt.Print("Please enter new task to wait for: ")
+			waitAction, _ := reader.ReadString('\n')
+			waitAction = strings.TrimSpace(waitAction)
+			if exists, _ := waitingActionExists(db, waitAction); exists {
+				fmt.Println("Waiting action `" + waitAction + "` already exists")
+				return
+			}
+			if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, date(), NULL)", waitAction); err != nil {
+				fatalError(err)
+			}
+			fmt.Println("Created new wait action")
+
+		case "someday":
+			fmt.Print("Please enter new project name: ")
+			reader := bufio.NewReader(os.Stdin)
+			futureTask, _ := reader.ReadString('\n')
+			futureTask = strings.TrimSpace(futureTask)
+			if exists, _ := somedayTaskExists(db, futureTask); exists {
+				fmt.Println("Someday action `" + futureTask + "` already exists")
+				return
+			}
+
+			if _, err := db.Exec("INSERT INTO someday (id, content, done, created_at) VALUES (NULL, ?, 0, date())", futureTask); err != nil {
+				fatalError(err)
+			}
+
+			fmt.Println("Someday action `" + futureTask + "` has been created")
+
+		default:
+			projectName := ""
+			for i := 2; i < len(cmdArgs); i++ {
+				if i > 2 {
+					projectName += " "
 				}
+				projectName += cmdArgs[i]
+			}
 
-				fmt.Println("Project `" + projectName + "` has been created")
+			var projectID uint32
+			exists, projectID := projectExists(db, projectName)
+			if !exists {
+				nonFatalError(errors.New("No active project `" + projectName + "` exists"))
+			}
 
-			case "context":
-				Todo("new context")
+			fmt.Print("Please enter new task for the project `" + projectName + "`: ")
+			task, _ := reader.ReadString('\n')
+			task = strings.TrimSpace(task)
 
-			case "wait":
-				fmt.Print("Please enter new task to wait for: ")
-				reader := bufio.NewReader(os.Stdin)
-				waitAction, _ := reader.ReadString('\n')
-				waitAction = strings.TrimSpace(waitAction)
-				if exists, _ := waitingActionExists(db, waitAction); exists {
-					fmt.Println("Waiting action `" + waitAction + "` already exists")
-					return
+			fmt.Print("Due date (YYYY-MM-DD) (Press ENTER if no due date): ")
+			dueStr, _ := reader.ReadString('\n')
+			dueStr = strings.TrimSpace(dueStr)
+
+			if dueStr == "" {
+				fmt.Println("Please enter context (Press ENTER for no context): ")
+				for k, v := range contextMap {
+					fmt.Println(fmt.Sprint(k, ". ", v))
 				}
-				if _, err := db.Exec("INSERT INTO waiting (id, content, done, created_at, finished_at) VALUES (NULL, ?, 0, date(), NULL)", waitAction); err != nil {
-					fatalError(err)
-				}
-				fmt.Println("Created new wait action")
+				number, _ := reader.ReadString('\n')
+				number = strings.TrimSpace(number)
 
-			case "someday":
-				fmt.Print("Please enter new project name: ")
-				reader := bufio.NewReader(os.Stdin)
-				futureTask, _ := reader.ReadString('\n')
-				futureTask = strings.TrimSpace(futureTask)
-				if exists, _ := somedayTaskExists(db, futureTask); exists {
-					fmt.Println("Someday action `" + futureTask + "` already exists")
-					return
-				}
-
-				if _, err := db.Exec("INSERT INTO someday (id, content, done, created_at) VALUES (NULL, ?, 0, date())", futureTask); err != nil {
-					fatalError(err)
-				}
-
-				fmt.Println("Someday action `" + futureTask + "` has been created")
-			default:
-				projectName := ""
-				for i := 2; i < len(cmdArgs); i++ {
-					if i > 2 {
-						projectName += " "
-					}
-					projectName += cmdArgs[i]
-				}
-
-				var projectID uint32
-				exists, projectID := projectExists(db, projectName)
-				if !exists {
-					rows, err := db.Query("SELECT id FROM projects WHERE content = ?", projectName)
-					if err != nil {
+				if number == "" {
+					if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, context, due, done, created_at, finished_at) VALUES (NULL, ?, ?, NULL, NULL, 0, date(), NULL)", task, projectID); err != nil {
 						fatalError(err)
 					}
-					defer rows.Close()
-					if rows.Next() {
-						fmt.Println("No active project `" + projectName + "` exists")
-						return
+				} else {
+					contextID, err := strconv.Atoi(number)
+					if err != nil {
+						nonFatalError(invalidCommandFormat)
 					}
-					nonFatalError(invalidCommand, projectName)
-				}
 
-				fmt.Print("Please enter new task for the project `" + projectName + "`: ")
-				reader := bufio.NewReader(os.Stdin)
-				task, _ := reader.ReadString('\n')
-				task = strings.TrimSpace(task)
-				fmt.Print("Due date (YYYY-MM-DD): ")
-				dueStr, _ := reader.ReadString('\n')
-				due, err := time.Parse("2006-01-02", strings.TrimSpace(dueStr))
+					if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, context, due, done, created_at, finished_at) VALUES (NULL, ?, ?, ?, NULL, 0, date(), NULL)", task, projectID, contextMap[uint32(contextID)]); err != nil {
+						fatalError(err)
+					}
+				}
+			} else {
+				due, err := time.Parse("2006-01-02", dueStr)
 				if err != nil {
 					nonFatalError(err)
 				}
@@ -364,14 +453,29 @@ func ParseArgs(dbFile string) {
 				if due.Before(time.Date(yyyy, mm, dd, 0, 0, 0, 0, time.Now().Location())) {
 					nonFatalError(errors.New("due date has passed already"))
 				}
-				Todo("ask for context")
-				if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, due, done, created_at, finished_at) VALUES (NULL, ?, ?, ?, 0, date(), NULL)", task, projectID, due.Format("2006-01-02")); err != nil {
-					fatalError(err)
+
+				fmt.Println("Please enter context (Press ENTER for no context): ")
+				for k, v := range contextMap {
+					fmt.Println(fmt.Sprint(k, ". ", v))
 				}
-				fmt.Println("New task created for `" + projectName + "`")
+				number, _ := reader.ReadString('\n')
+				number = strings.TrimSpace(number)
+				if number == "" {
+					if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, context, due, done, created_at, finished_at) VALUES (NULL, ?, ?, NULL, ?, 0, date(), NULL)", task, projectID, due.Format("2006-01-02")); err != nil {
+						fatalError(err)
+					}
+				} else {
+					contextID, err := strconv.Atoi(number)
+					if err != nil {
+						nonFatalError(invalidCommandFormat)
+					}
+
+					if _, err := db.Exec("INSERT INTO tasks (id, content, project_id, context, due, done, created_at, finished_at) VALUES (NULL, ?, ?, ?, ?, 0, date(), NULL)", task, projectID, contextMap[uint32(contextID)], due.Format("2006-01-02")); err != nil {
+						fatalError(err)
+					}
+				}
 			}
-		} else {
-			nonFatalError(invalidCommandFormat)
+			fmt.Println("New task created for `" + projectName + "`")
 		}
 
 	case "done":
@@ -399,32 +503,6 @@ func ParseArgs(dbFile string) {
 				fmt.Println("Capture item `" + cmdArgs[3] + "` does not exist")
 			} else {
 				fmt.Println("Marked capture item `" + cmdArgs[3] + "` as finished\n")
-			}
-
-		case "next":
-			actionID, err := strconv.Atoi(cmdArgs[3])
-			if err != nil {
-				nonFatalError(invalidCommandFormat)
-			}
-			r, err := db.Exec("UPDATE next_actions SET done = 1, finished_at = date() WHERE id = ?", actionID)
-			if err != nil {
-				fatalError(err)
-			}
-
-			rows, err := r.RowsAffected()
-			if err != nil {
-				fatalError(err)
-			}
-
-			if rows == 0 {
-				fmt.Println("Next action " + cmdArgs[3] + " does not exist")
-			} else {
-				row := db.QueryRow("SELECT content FROM next_actions WHERE id = ?", actionID)
-				var finishedTask string
-				if err := row.Scan(&finishedTask); err != nil {
-					fatalError(err)
-				}
-				fmt.Println("Finished task " + cmdArgs[3] + "\n" + finishedTask)
 			}
 
 		case "someday":
@@ -499,7 +577,7 @@ func ParseArgs(dbFile string) {
 			row := db.QueryRow("SELECT id, content, done, created_at FROM waiting WHERE id = ? AND done = 0", id)
 			err = row.Scan(&waitingTask.ID, &waitingTask.Content, &waitingTask.Done, &waitingTask.CreatedAt)
 			if errors.Is(err, sql.ErrNoRows) {
-				nonFatalError(errors.New("Waiting action `" + cmdArgs[3] + "` does not exist"))
+				fmt.Println("Waiting action `" + cmdArgs[3] + "` does not exist")
 			}
 
 			if _, err := db.Exec("UPDATE waiting SET done = 1, finished_at = date() WHERE id = ?", id); err != nil {
@@ -507,48 +585,53 @@ func ParseArgs(dbFile string) {
 			}
 
 			fmt.Println("Marked waiting task `" + cmdArgs[3] + "` as done")
+
+		case "task":
+			taskID, err := strconv.Atoi(cmdArgs[3])
+			if err != nil {
+				nonFatalError(invalidCommandFormat)
+			}
+
+			row := db.QueryRow("SELECT content FROM tasks WHERE id = ?", taskID)
+			err = row.Err()
+			if errors.Is(err, sql.ErrNoRows) {
+				fmt.Print(fmt.Sprint("Task ", cmdArgs[3], " does not exist\n"))
+			} else if err != nil {
+				fatalError(err)
+			}
+
+			var finishedTask string
+			if err := row.Scan(&finishedTask); err != nil {
+				fatalError(err)
+			}
+
+			_, err = db.Exec("UPDATE tasks SET done = 1, finished_at = date() WHERE id = ?", taskID)
+			if err != nil {
+				fatalError(err)
+			}
+
+			fmt.Println("Finished task `" + cmdArgs[3] + "`\n`" + finishedTask + "`")
+
 		default:
 			projectName := ""
-			for i := 2; i < len(cmdArgs)-1; i++ {
+			for i := 2; i < len(cmdArgs); i++ {
 				if i > 2 {
 					projectName += " "
 				}
 				projectName += cmdArgs[i]
 			}
-			if taskID, err := strconv.Atoi(cmdArgs[len(cmdArgs)-1]); err != nil {
-				projectName += " " + cmdArgs[len(cmdArgs)-1]
-
-				if exists, _ := projectExists(db, projectName); !exists {
-					fmt.Println("No active project `" + projectName + "` exists")
-					return
-				}
-
-				if _, err := db.Exec("UPDATE projects SET done = 1, finished_at = date() WHERE content = ? AND done = 0", projectName); err != nil {
-					fatalError(err)
-				}
-				fmt.Println("Finished project `" + projectName + "`\n")
-			} else {
-				exists, projectID := projectExists(db, projectName)
-				if !exists {
-					fmt.Println("No active project `" + projectName + "` exists")
-					return
-				}
-
-				res, err := db.Exec("UPDATE tasks SET done = 1, finished_at = date() WHERE id = ? AND project_id = ?", taskID, projectID)
-				if err != nil {
-					fatalError(err)
-				}
-				updatedRows, err := res.RowsAffected()
-				if err != nil {
-					fatalError(err)
-				}
-				if updatedRows == 0 {
-					fmt.Println("Task `" + cmdArgs[len(cmdArgs)-1] + "` does not exist for project `" + projectName + "`")
-					return
-				}
-				fmt.Println("Task `" + cmdArgs[len(cmdArgs)-1] + "` for project `" + projectName + "` has been marked complete")
+			exists, projectID := projectExists(db, projectName)
+			if !exists {
+				fmt.Println("No active project `" + projectName + "` exists")
+				return
 			}
+
+			if _, err := db.Exec("UPDATE projects SET done = 1, finished_at = date() WHERE id = ? AND done = 0", projectID); err != nil {
+				fatalError(err)
+			}
+			fmt.Println("Finished project `" + projectName + "`\n")
 		}
+
 	case "in":
 		rows, err := db.Query("SELECT id, content FROM capture WHERE done == 0")
 		if err != nil {
@@ -572,6 +655,7 @@ func ParseArgs(dbFile string) {
 		for _, c := range captureList {
 			fmt.Print(c.Format())
 		}
+
 	case "waiting":
 		rows, err := db.Query("SELECT id, content, done, created_at FROM waiting WHERE done = 0")
 		if err != nil {
@@ -593,6 +677,7 @@ func ParseArgs(dbFile string) {
 		for _, w := range waitList {
 			fmt.Println("- " + w.Format())
 		}
+
 	case "someday":
 		rows, err := db.Query("SELECT id, content, done, created_at FROM someday WHERE done = 0")
 		if err != nil {
@@ -614,30 +699,52 @@ func ParseArgs(dbFile string) {
 		for _, s := range futureTasks {
 			fmt.Print("- " + s.Format())
 		}
+
 	case "read":
-		rows, err := db.Query("SELECT tasks.id, tasks.content, tasks.project_id, tasks.context, tasks.due, tasks.done, tasks.created_at, projects.id, projects.content due FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 AND tasks.done = 0 AND tasks.content LIKE '%read %' GROUP BY tasks.project_id")
+		rows, err := db.Query("SELECT tasks.id, tasks.content, tasks.project_id, tasks.context, tasks.due, tasks.done, tasks.created_at, projects.id, projects.content due FROM tasks LEFT JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 AND tasks.done = 0 AND tasks.content LIKE '%read%' GROUP BY tasks.due")
 		if err != nil {
 			fatalError(err)
 		}
 		defer rows.Close()
 
-		tasks := make(map[tudoProject][]tudoProjectAction)
+		projectTasks := make(map[tudoProject][]tudoTask)
+		var nextActions []tudoTask
 		for rows.Next() {
 			var project tudoProject
-			var task tudoProjectAction
+			var task tudoTask
 			if err := rows.Scan(&task.ID, &task.Content, &task.ProjectID, &task.Context, &task.Due, &task.Done, &task.CreatedAt, &project.ID, &project.Content); err != nil {
 				fatalError(err)
 			}
-			tasks[project] = append(tasks[project], task)
+			if task.ProjectID != nil {
+				projectTasks[project] = append(projectTasks[project], task)
+			} else {
+				nextActions = append(nextActions, task)
+			}
 		}
-		if len(tasks) > 0 {
-			for project, projectTasks := range tasks {
-				fmt.Println(project.Content)
-				for _, t := range projectTasks {
-					fmt.Println("- " + t.Format())
+
+		if len(nextActions) > 0 {
+			for _, t := range nextActions {
+				fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+				if t.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
 				}
 			}
-		} else {
+		}
+
+		if len(projectTasks) > 0 {
+			for project, projectTasks := range projectTasks {
+				fmt.Println(project.Content)
+				for _, t := range projectTasks {
+					fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+					if t.Context != nil {
+						fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+					}
+					if t.Due != nil {
+						fmt.Print(fmt.Sprint("Due: ", *t.Due, "\n"))
+					}
+				}
+			}
+		} else if len(nextActions) == 0 && len(projectTasks) == 0 {
 			rows, err = db.Query("SELECT id, content FROM someday WHERE done = 0 AND content LIKE '%read %'")
 			if err != nil {
 				fatalError(err)
@@ -653,24 +760,24 @@ func ParseArgs(dbFile string) {
 			if len(futureTasks) == 0 {
 				fmt.Println("Nothing to read for now")
 			} else {
+				fmt.Println("SOMEDAY")
 				for _, t := range futureTasks {
 					fmt.Println("- " + t.Format())
 				}
 			}
 		}
+
 	case "next":
-		rows, err := db.Query("SELECT id, content FROM next_actions WHERE done == 0")
+		rows, err := db.Query("SELECT id, content, context FROM tasks WHERE done == 0 AND project_id IS NULL")
 		if err != nil {
 			fatalError(err)
 		}
 		defer rows.Close()
 
-		defer rows.Close()
-
-		var nextActions []tudoNextAction
+		var nextActions []tudoTask
 		for rows.Next() {
-			var action tudoNextAction
-			if err := rows.Scan(&action.ID, &action.Content); err != nil {
+			var action tudoTask
+			if err := rows.Scan(&action.ID, &action.Content, &action.Context); err != nil {
 				fatalError(err)
 			}
 			nextActions = append(nextActions, action)
@@ -681,8 +788,12 @@ func ParseArgs(dbFile string) {
 		}
 
 		for _, a := range nextActions {
-			fmt.Print(a.Format())
+			fmt.Print(fmt.Sprint("- ID: ", a.ID, "\n", a.Content, "\n"))
+			if a.Context != nil {
+				fmt.Print(fmt.Sprint("Context: ", *a.Context, "\n"))
+			}
 		}
+
 	case "all":
 		if len(cmdArgs) == 2 {
 			Todo("all displaying next actions, waiting list and all tasks")
@@ -704,15 +815,23 @@ func ParseArgs(dbFile string) {
 				fatalError(err)
 			}
 			for rows.Next() {
-				var t tudoProjectAction
+				var t tudoTask
 				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due); err != nil {
 					fatalError(err)
 				}
-				fmt.Println("- " + t.Format())
+				fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+				if t.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+				}
+				if t.Due != nil {
+					fmt.Print(fmt.Sprint("Due: ", *t.Due, "\n"))
+				}
 			}
 		}
+
 	case "edit":
 		Todo("edit")
+
 	case "clean":
 		row := db.QueryRow("SELECT COUNT(*) FROM capture WHERE done = 0")
 		if row.Err() != nil {
@@ -736,7 +855,8 @@ func ParseArgs(dbFile string) {
 				nonFatalError(invalidCommand)
 			}
 		}
-		row = db.QueryRow("SELECT COUNT(*) FROM next_actions WHERE done = 0")
+
+		row = db.QueryRow("SELECT COUNT(*) FROM tasks WHERE done = 0 AND project_id IS NULL")
 		if row.Err() != nil {
 			fatalError(row.Err())
 		}
@@ -749,7 +869,7 @@ func ParseArgs(dbFile string) {
 			case "n":
 				break
 			case "y":
-				if _, err := db.Exec("UPDATE next_actions SET done = 1, finished_at = date() WHERE done = 0"); err != nil {
+				if _, err := db.Exec("UPDATE tasks SET done = 1, finished_at = date() WHERE done = 0 AND project_id IS NULL"); err != nil {
 					fatalError(err)
 				}
 				fmt.Println(fmt.Sprint("Cleaned `", cnt, "` next actions"))
@@ -757,10 +877,11 @@ func ParseArgs(dbFile string) {
 				nonFatalError(invalidCommand)
 			}
 		}
+
 		row = db.QueryRow("SELECT COUNT(*) FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 AND tasks.done = 0")
 		row.Scan(&cnt)
 		if cnt > 0 {
-			fmt.Println(fmt.Sprint("You will be cleaning out `", cnt, "` tasks. Continue? (y/n)"))
+			fmt.Println(fmt.Sprint("You will be cleaning out `", cnt, "` project tasks. Continue? (y/n)"))
 			var ans string
 			fmt.Scanln(&ans)
 			switch ans {
@@ -770,15 +891,18 @@ func ParseArgs(dbFile string) {
 				if _, err := db.Exec("UPDATE tasks SET done = 1, finished_at = date() WHERE done = 0 AND project_id IN (SELECT id FROM projects WHERE done = 0)"); err != nil {
 					fatalError(err)
 				}
-				fmt.Println(fmt.Sprint("Cleaned `", cnt, "` tasks"))
+				fmt.Println(fmt.Sprint("Cleaned `", cnt, "` project tasks"))
 			default:
 				nonFatalError(invalidCommand)
 			}
 		}
+
 	case "undo":
 		Todo("undo")
+
 	case "redo":
 		Todo("redo")
+
 	case "review":
 		thresh := time.Now().AddDate(0, 0, -7)
 
@@ -818,20 +942,20 @@ func ParseArgs(dbFile string) {
 			fmt.Print("- " + p.Format())
 		}
 
-		pendingTasks := make(map[tudoProject][]tudoProjectAction)
-		finishedTasks := make(map[tudoProject][]tudoProjectAction)
-		rows, err = db.Query("SELECT tasks.id, tasks.content, tasks.due, tasks.done, tasks.finished_at, projects.id, projects.content FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 GROUP BY projects.id")
+		pendingTasks := make(map[tudoProject][]tudoTask)
+		finishedTasks := make(map[tudoProject][]tudoTask)
+		rows, err = db.Query("SELECT tasks.id, tasks.content, tasks.context, tasks.due, tasks.done, tasks.finished_at, projects.id, projects.content FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 GROUP BY projects.id")
 		if err != nil {
 			fatalError(err)
 		}
 
 		for rows.Next() {
 			var p tudoProject
-			var t tudoProjectAction
+			var t tudoTask
 			if err = rows.Scan(&t.ID, &t.Content, &t.Due, &t.Done, &t.FinishedAt, &p.ID, &p.Content); err != nil {
 				fatalError(err)
 			}
-			dueTime, err := time.Parse("2006-01-02", t.Due)
+			dueTime, err := time.Parse("2006-01-02", *t.Due)
 			if err != nil {
 				nonFatalError(err)
 			}
@@ -844,14 +968,14 @@ func ParseArgs(dbFile string) {
 			}
 		}
 
-		var pendingNextAction []tudoNextAction
-		var finishedNextAction []tudoNextAction
-		rows, err = db.Query("SELECT id, content, done, finished_at FROM next_actions")
+		var pendingNextAction []tudoTask
+		var finishedNextAction []tudoTask
+		rows, err = db.Query("SELECT id, content, context, done, finished_at FROM tasks WHERE project_id IS NULL")
 		if err != nil {
 			fatalError(err)
 		}
 		for rows.Next() {
-			var n tudoNextAction
+			var n tudoTask
 			if err = rows.Scan(&n.ID, &n.Content, &n.Done, &n.FinishedAt); err != nil {
 				fatalError(err)
 			}
@@ -957,7 +1081,17 @@ func ParseArgs(dbFile string) {
 					fmt.Print("- " + p.Format())
 				}
 			case "contexts":
-				Todo("list contexts")
+				rows, err := db.Query("SELECT id, content FROM contexts")
+				if err != nil {
+					fatalError(err)
+				}
+				for rows.Next() {
+					var c tudoContext
+					if err := rows.Scan(&c.ID, &c.Content); err != nil {
+						fatalError(err)
+					}
+					fmt.Print(fmt.Sprint("- ID: ", c.ID, "\n", c.Content, "\n"))
+				}
 			default:
 				nonFatalError(invalidCommand)
 			}
@@ -974,28 +1108,49 @@ func ParseArgs(dbFile string) {
 				fmt.Println("No active project `" + projectName + "` exists\n")
 			}
 
-			now := time.Now()
-			todayDate := now.Format("2006-01-02")
+			yyyy, mm, dd := time.Now().Date()
+			todayDate := time.Date(yyyy, mm, dd, 0, 0, 0, 0, time.Now().Location())
 
-			rows, err := db.Query("SELECT id, content, project_id, context, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", projectID, todayDate)
+			rows, err := db.Query("SELECT id, content, project_id, context, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0", projectID)
 			if err != nil {
 				fatalError(err)
 			}
 			defer rows.Close()
 
-			var tasks []tudoProjectAction
+			var calendarTasks []tudoTask
+			var nonCalendarTasks []tudoTask
 			for rows.Next() {
-				var t tudoProjectAction
+				var t tudoTask
 				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due, &t.Done, &t.CreatedAt); err != nil {
 					fatalError(err)
 				}
-				tasks = append(tasks, t)
+				if t.Due != nil {
+					due, err := time.ParseInLocation("2006-01-02", *t.Due, time.Now().Location())
+					if err != nil {
+						fatalError(err)
+					}
+					if todayDate.Equal(due) {
+						calendarTasks = append(calendarTasks, t)
+					}
+				} else {
+					nonCalendarTasks = append(nonCalendarTasks, t)
+				}
 			}
-			if len(tasks) == 0 {
+			if len(calendarTasks) == 0 && len(nonCalendarTasks) == 0 {
 				fmt.Println("No tasks for project `" + projectName + "` today")
 			}
-			for _, t := range tasks {
-				fmt.Print("- " + t.Format())
+			for _, t := range calendarTasks {
+				fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+				if t.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+				}
+				fmt.Print(fmt.Sprint("Due: ", *t.Due, "\n"))
+			}
+			for _, t := range nonCalendarTasks {
+				fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+				if t.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+				}
 			}
 		}
 	}

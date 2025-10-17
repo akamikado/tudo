@@ -14,20 +14,12 @@ CREATE TABLE IF NOT EXISTS capture (
   created_at TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS next_actions (
-  id INTEGER NOT NULL PRIMARY KEY,
-  content TEXT NOT NULL,
-  done INTEGER NOT NULL,
-  created_at TEXT NOT NULL,
-  finished_at TEXT
-);
-
 CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL,
-  project_id INTEGER NOT NULL,
-  context TEXT NOT NULL,
-  due TEXT NOT NULL,
+  project_id INTEGER,
+  context TEXT,
+  due TEXT ,
   done INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   finished_at TEXT
