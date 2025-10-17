@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS waiting (
   created_at TEXT NOT NULL,
   finished_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS action_log (
+  id INTEGER NOT NULL PRIMARY KEY,
+  table_name TEXT NOT NULL,
+  row_id INTEGER NOT NULL,
+  created_at TEXT NOT NULL
+);
 `
 
 func Setup(dbFile string) error {

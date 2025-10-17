@@ -145,6 +145,13 @@ func (w *tudoWaitingAction) Format() string {
 	return fmt.Sprint("ID: ", w.ID, "\n", w.Content, "\n")
 }
 
+type tudoLogAction struct {
+	ID        uint32
+	TableName string
+	RowID     uint32
+	CreatedAt string
+}
+
 func ParseArgs(dbFile string) {
 	db, err := database.Connect(dbFile)
 	if err != nil {
@@ -503,6 +510,9 @@ func ParseArgs(dbFile string) {
 				fmt.Println("Capture item `" + cmdArgs[3] + "` does not exist")
 			} else {
 				fmt.Println("Marked capture item `" + cmdArgs[3] + "` as finished\n")
+				if _, err := db.Exec("INSERT INTO action_log (id, table_name, row_id, created_at) VALUES (NULL, ?, ?, datetime())", "capture", captureID); err != nil {
+					fatalError(err)
+				}
 			}
 
 		case "someday":
@@ -526,6 +536,10 @@ func ParseArgs(dbFile string) {
 			}
 
 			fmt.Println("Marked someday task `" + cmdArgs[3] + "` as done")
+			if _, err := db.Exec("INSERT INTO action_log (id, table_name, row_id, created_at) VALUES (NULL, ?, ?, datetime())", "someday", id); err != nil {
+				fatalError(err)
+			}
+
 			fmt.Println("Create someday task as project? (y/n)")
 			var ans string
 			fmt.Scanln(&ans)
@@ -586,6 +600,10 @@ func ParseArgs(dbFile string) {
 
 			fmt.Println("Marked waiting task `" + cmdArgs[3] + "` as done")
 
+			if _, err := db.Exec("INSERT INTO action_log (id, table_name, row_id, created_at) VALUES (NULL, ?, ?, datetime())", "waiting", id); err != nil {
+				fatalError(err)
+			}
+
 		case "task":
 			taskID, err := strconv.Atoi(cmdArgs[3])
 			if err != nil {
@@ -612,6 +630,10 @@ func ParseArgs(dbFile string) {
 
 			fmt.Println("Finished task `" + cmdArgs[3] + "`\n`" + finishedTask + "`")
 
+			if _, err := db.Exec("INSERT INTO action_log (id, table_name, row_id, created_at) VALUES (NULL, ?, ?, datetime())", "tasks", taskID); err != nil {
+				fatalError(err)
+			}
+
 		default:
 			projectName := ""
 			for i := 2; i < len(cmdArgs); i++ {
@@ -630,6 +652,10 @@ func ParseArgs(dbFile string) {
 				fatalError(err)
 			}
 			fmt.Println("Finished project `" + projectName + "`\n")
+
+			if _, err := db.Exec("INSERT INTO action_log (id, table_name, id, created_at) VALUES (NULL, ?, ?, datetime())", "tasks", projectID); err != nil {
+				fatalError(err)
+			}
 		}
 
 	case "in":
@@ -937,7 +963,26 @@ func ParseArgs(dbFile string) {
 		}
 
 	case "edit":
-		Todo("edit")
+		if len(cmdArgs) < 3 {
+			nonFatalError(invalidCommandFormat)
+		}
+
+		switch cmdArgs[2] {
+		case "in":
+			Todo("edit in")
+
+		case "task":
+			Todo("edit task")
+
+		case "waiting":
+			Todo("edit waiting")
+
+		case "someday":
+			Todo("edit someday")
+
+		case "project":
+			Todo("edit project")
+		}
 
 	case "clean":
 		row := db.QueryRow("SELECT COUNT(*) FROM capture WHERE done = 0")
@@ -1005,10 +1050,34 @@ func ParseArgs(dbFile string) {
 		}
 
 	case "undo":
-		Todo("undo")
+		row := db.QueryRow("SELECT id, table_name, row_id, created_at FROM action_log ORDER BY id DESC LIMIT 1")
+		err := row.Err()
+		if err != nil {
+			fatalError(err)
+		}
 
-	case "redo":
-		Todo("redo")
+		var a tudoLogAction
+		row.Scan(&a.ID, &a.TableName, &a.RowID, &a.CreatedAt)
+		if a.ID <= 0 || a.TableName == "" || a.RowID <= 0 {
+			nonFatalError(errors.New("No actions to undo"))
+		}
+
+		fmt.Print(fmt.Sprint("You will be marking `", a.RowID, "` in `", a.TableName, "` as undone. Continue? (y/n)\n"))
+		var ans string
+		fmt.Scanln(&ans)
+		switch ans {
+		case "n":
+		case "y":
+			if _, err := db.Exec("UPDATE "+a.TableName+" SET done = 0 WHERE id = ?", a.RowID); err != nil {
+				fatalError(err)
+			}
+			if _, err := db.Exec("DELETE FROM action_log WHERE id = ?", a.ID); err != nil {
+				fatalError(err)
+			}
+			fmt.Print(fmt.Sprint("Marked `", a.RowID, "` in `", a.TableName, "` as undone\n"))
+		default:
+			nonFatalError(invalidCommand)
+		}
 
 	case "review":
 		thresh := time.Now().AddDate(0, 0, -7)
