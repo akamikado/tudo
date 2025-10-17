@@ -207,7 +207,7 @@ func ParseArgs(dbFile string) {
 		now := time.Now()
 		todayDate := now.Format("2006-01-02")
 		for _, project := range projects {
-			rows, err := db.Query("SELECT id, content, project_id, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", project.ID, todayDate)
+			rows, err := db.Query("SELECT id, content, project_id, context, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", project.ID, todayDate)
 			if err != nil {
 				fatalError(err)
 			}
@@ -215,7 +215,7 @@ func ParseArgs(dbFile string) {
 			var tasks []tudoProjectAction
 			for rows.Next() {
 				var t tudoProjectAction
-				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Due, &t.Done, &t.CreatedAt); err != nil {
+				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due, &t.Done, &t.CreatedAt); err != nil {
 					fatalError(err)
 				}
 				tasks = append(tasks, t)
@@ -224,7 +224,6 @@ func ParseArgs(dbFile string) {
 				noTasks = false
 				fmt.Print("\n" + project.Content + "\n")
 			}
-			Todo("contexts have to printed")
 			for _, t := range tasks {
 				fmt.Print("- " + t.Format())
 			}
@@ -616,7 +615,7 @@ func ParseArgs(dbFile string) {
 			fmt.Print("- " + s.Format())
 		}
 	case "read":
-		rows, err := db.Query("SELECT tasks.id, tasks.content, tasks.project_id, tasks.due, tasks.done, tasks.created_at, projects.id, projects.content due FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 AND tasks.done = 0 AND tasks.content LIKE '%read %' GROUP BY tasks.project_id")
+		rows, err := db.Query("SELECT tasks.id, tasks.content, tasks.project_id, tasks.context, tasks.due, tasks.done, tasks.created_at, projects.id, projects.content due FROM tasks JOIN projects ON projects.id = tasks.project_id WHERE projects.done = 0 AND tasks.done = 0 AND tasks.content LIKE '%read %' GROUP BY tasks.project_id")
 		if err != nil {
 			fatalError(err)
 		}
@@ -626,7 +625,7 @@ func ParseArgs(dbFile string) {
 		for rows.Next() {
 			var project tudoProject
 			var task tudoProjectAction
-			if err := rows.Scan(&task.ID, &task.Content, &task.ProjectID, &task.Due, &task.Done, &task.CreatedAt, &project.ID, &project.Content); err != nil {
+			if err := rows.Scan(&task.ID, &task.Content, &task.ProjectID, &task.Context, &task.Due, &task.Done, &task.CreatedAt, &project.ID, &project.Content); err != nil {
 				fatalError(err)
 			}
 			tasks[project] = append(tasks[project], task)
@@ -634,7 +633,6 @@ func ParseArgs(dbFile string) {
 		if len(tasks) > 0 {
 			for project, projectTasks := range tasks {
 				fmt.Println(project.Content)
-				Todo("contexts have to be printed")
 				for _, t := range projectTasks {
 					fmt.Println("- " + t.Format())
 				}
@@ -701,14 +699,13 @@ func ParseArgs(dbFile string) {
 				fmt.Println("No active project `" + projectName + "` exists\n")
 			}
 
-			rows, err := db.Query("SELECT id, content, project_id, due FROM tasks WHERE project_id = ? AND done = 0", projectID)
+			rows, err := db.Query("SELECT id, content, project_id, context, due FROM tasks WHERE project_id = ? AND done = 0", projectID)
 			if err != nil {
 				fatalError(err)
 			}
-			Todo("contexts have to be printed")
 			for rows.Next() {
 				var t tudoProjectAction
-				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Due); err != nil {
+				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due); err != nil {
 					fatalError(err)
 				}
 				fmt.Println("- " + t.Format())
@@ -980,7 +977,7 @@ func ParseArgs(dbFile string) {
 			now := time.Now()
 			todayDate := now.Format("2006-01-02")
 
-			rows, err := db.Query("SELECT id, content, project_id, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", projectID, todayDate)
+			rows, err := db.Query("SELECT id, content, project_id, context, due, done, created_at FROM tasks WHERE project_id = ? AND done = 0 AND due = ?", projectID, todayDate)
 			if err != nil {
 				fatalError(err)
 			}
@@ -989,7 +986,7 @@ func ParseArgs(dbFile string) {
 			var tasks []tudoProjectAction
 			for rows.Next() {
 				var t tudoProjectAction
-				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Due, &t.Done, &t.CreatedAt); err != nil {
+				if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due, &t.Done, &t.CreatedAt); err != nil {
 					fatalError(err)
 				}
 				tasks = append(tasks, t)
@@ -997,7 +994,6 @@ func ParseArgs(dbFile string) {
 			if len(tasks) == 0 {
 				fmt.Println("No tasks for project `" + projectName + "` today")
 			}
-			Todo("contexts have to be printed")
 			for _, t := range tasks {
 				fmt.Print("- " + t.Format())
 			}
