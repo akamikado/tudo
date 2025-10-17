@@ -796,7 +796,114 @@ func ParseArgs(dbFile string) {
 
 	case "all":
 		if len(cmdArgs) == 2 {
-			Todo("all displaying next actions, waiting list and all tasks")
+			noTasks := true
+			rows, err := db.Query("SELECT id, content, context FROM tasks WHERE done == 0 AND project_id IS NULL GROUP BY context")
+			if err != nil {
+				fatalError(err)
+			}
+			defer rows.Close()
+
+			var nextActions []tudoTask
+			for rows.Next() {
+				var action tudoTask
+				if err := rows.Scan(&action.ID, &action.Content, &action.Context); err != nil {
+					fatalError(err)
+				}
+				nextActions = append(nextActions, action)
+			}
+
+			if len(nextActions) > 0 {
+				noTasks = false
+				fmt.Println("NEXT ACTIONS")
+			}
+			for _, a := range nextActions {
+				fmt.Print(fmt.Sprint("- ID: ", a.ID, "\n", a.Content, "\n"))
+				if a.Context != nil {
+					fmt.Print(fmt.Sprint("Context: ", *a.Context, "\n"))
+				}
+			}
+
+			rows, err = db.Query("SELECT id, content, done, created_at FROM projects WHERE done = 0")
+			if err != nil {
+				fatalError(err)
+			}
+
+			fmt.Println("\nPROJECTS")
+
+			var projects []tudoProject
+			for rows.Next() {
+				var p tudoProject
+				if err := rows.Scan(&p.ID, &p.Content, &p.Done, &p.CreatedAt); err != nil {
+					fatalError(err)
+				}
+				projects = append(projects, p)
+			}
+
+			for _, project := range projects {
+				rows, err := db.Query("SELECT id, content, project_id, context, due, done FROM tasks WHERE project_id = ? AND done = 0", project.ID)
+				if err != nil {
+					fatalError(err)
+				}
+				defer rows.Close()
+
+				var calendarTasks []tudoTask
+				var nonCalendarTasks []tudoTask
+				for rows.Next() {
+					var t tudoTask
+					if err := rows.Scan(&t.ID, &t.Content, &t.ProjectID, &t.Context, &t.Due, &t.Done); err != nil {
+						fatalError(err)
+					}
+					if t.Due != nil {
+						calendarTasks = append(calendarTasks, t)
+					} else {
+						nonCalendarTasks = append(nonCalendarTasks, t)
+					}
+				}
+				if len(calendarTasks) > 0 || len(nonCalendarTasks) > 0 {
+					noTasks = false
+					fmt.Println(project.Content)
+				}
+				for _, t := range calendarTasks {
+					fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+					if t.Context != nil {
+						fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+					}
+					fmt.Print(fmt.Sprint("Due: ", *t.Due, "\n"))
+				}
+				for _, t := range nonCalendarTasks {
+					fmt.Print(fmt.Sprint("- ID: ", t.ID, "\n", t.Content, "\n"))
+					if t.Context != nil {
+						fmt.Print(fmt.Sprint("Context: ", *t.Context, "\n"))
+					}
+				}
+			}
+
+			fmt.Println("\nWAITING")
+
+			rows, err = db.Query("SELECT id, content, done FROM waiting WHERE done = 0")
+			if err != nil {
+				fatalError(err)
+			}
+
+			var waitingTasks []tudoWaitingAction
+			for rows.Next() {
+				var w tudoWaitingAction
+				if err := rows.Scan(&w.ID, &w.Content, &w.Done); err != nil {
+					fatalError(err)
+				}
+				waitingTasks = append(waitingTasks, w)
+			}
+
+			if len(waitingTasks) > 0 {
+				noTasks = false
+			}
+			for _, w := range waitingTasks {
+				fmt.Print(fmt.Sprint("- ID: ", w.ID, "\n", w.Content, "\n"))
+			}
+
+			if noTasks {
+				fmt.Println("No tasks for now")
+			}
 		} else {
 			projectName := ""
 			for i := 2; i < len(cmdArgs); i++ {
