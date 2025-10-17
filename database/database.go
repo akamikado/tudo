@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS tasks (
   id INTEGER NOT NULL PRIMARY KEY,
   content TEXT NOT NULL,
   project_id INTEGER NOT NULL,
+  context TEXT NOT NULL,
   due TEXT NOT NULL,
   done INTEGER NOT NULL,
   created_at TEXT NOT NULL,
@@ -38,6 +39,11 @@ CREATE TABLE IF NOT EXISTS projects (
   done INTEGER NOT NULL,
   created_at TEXT NOT NULL,
   finished_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS contexts (
+  id INTEGER NOT NULL PRIMARY KEY,
+  content TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS someday (
