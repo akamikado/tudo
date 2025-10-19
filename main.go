@@ -6,7 +6,7 @@ import (
 	"io/fs"
 	"os"
 
-	"tudo/cmd"
+	"tudo/cli"
 	"tudo/database"
 )
 
@@ -49,5 +49,5 @@ func main() {
 		os.Exit(1)
 	}
 
-	cmd.ParseArgs(dbFile)
+	cli.ParseArgs(dbFile)
 }
