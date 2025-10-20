@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"time"
-
-	"tudo/util"
 )
 
 type TudoWaiting struct {
@@ -23,15 +21,15 @@ func New(db *sql.DB, content string) error {
 	return nil
 }
 
-func IDExists(db *sql.DB, id uint32) bool {
+func IDExists(db *sql.DB, id uint32) (bool, error) {
 	row := db.QueryRow("SELECT id, content, done, created_at FROM waiting WHERE id = ? AND done = 0", id)
 	err := row.Err()
 	if errors.Is(err, sql.ErrNoRows) {
-		return false
-	} else {
-		util.FatalError(err)
+		return false, err
+	} else if err != nil {
+		return false, err
 	}
-	return true
+	return true, err
 }
 
 func ContentExists(db *sql.DB, content string) (bool, uint32, error) {
@@ -58,7 +56,6 @@ func GetActive(db *sql.DB) ([]TudoWaiting, error) {
 	for rows.Next() {
 		var w TudoWaiting
 		if err := rows.Scan(&w.ID, &w.Content, &w.Done, &w.CreatedAt); err != nil {
-			util.FatalError(err)
 			return []TudoWaiting{}, err
 		}
 		waitList = append(waitList, w)
@@ -85,7 +82,6 @@ func Review(db *sql.DB, thresh time.Time) (map[time.Time][]TudoWaiting, error) {
 	for rows.Next() {
 		var w TudoWaiting
 		if err := rows.Scan(&w.ID, &w.Content, &w.Done, &w.CreatedAt, &w.FinishedAt); err != nil {
-			util.FatalError(err)
 			return map[time.Time][]TudoWaiting{}, err
 		}
 

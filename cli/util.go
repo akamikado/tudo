@@ -5,8 +5,8 @@ import (
 	"os"
 )
 
-func todo(s string) {
-	fmt.Println("TODO: " + s)
+func todo() {
+	fmt.Println("This command is still under development")
 	os.Exit(0)
 }
 
