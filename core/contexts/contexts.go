@@ -50,6 +50,7 @@ func GetAll(db *sql.DB) ([]TudoContext, error) {
 	if err != nil {
 		return []TudoContext{}, err
 	}
+	defer rows.Close()
 
 	var contexts []TudoContext
 	for rows.Next() {

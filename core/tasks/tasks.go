@@ -71,6 +71,7 @@ func GetTodayCalenderTasks(db *sql.DB) ([]TudoTask, error) {
 	if err != nil {
 		return []TudoTask{}, err
 	}
+	defer rows.Close()
 
 	yyyy, mm, dd := time.Now().Date()
 	todayDate := time.Date(yyyy, mm, dd, 0, 0, 0, 0, time.Now().Location())
@@ -98,6 +99,7 @@ func GetAllCalenderTasks(db *sql.DB) ([]TudoTask, error) {
 	if err != nil {
 		return []TudoTask{}, err
 	}
+	defer rows.Close()
 
 	var tasks []TudoTask
 	for rows.Next() {
@@ -117,6 +119,7 @@ func GetTodayProjectCalendarTasks(db *sql.DB, projectID uint32) ([]TudoTask, err
 	if err != nil {
 		return []TudoTask{}, err
 	}
+	defer rows.Close()
 
 	yyyy, mm, dd := time.Now().Date()
 	todayDate := time.Date(yyyy, mm, dd, 0, 0, 0, 0, time.Now().Location())
@@ -144,6 +147,7 @@ func GetAllProjectCalendarTasks(db *sql.DB, projectID uint32) ([]TudoTask, error
 	if err != nil {
 		return []TudoTask{}, err
 	}
+	defer rows.Close()
 
 	var tasks []TudoTask
 	for rows.Next() {
@@ -261,6 +265,7 @@ func Review(db *sql.DB, thresh time.Time) (map[time.Time][]TudoTask, error) {
 	if err != nil {
 		return map[time.Time][]TudoTask{}, err
 	}
+	defer rows.Close()
 
 	tasksFinishedSinceThreshold := make(map[time.Time][]TudoTask)
 	for rows.Next() {
@@ -288,6 +293,7 @@ func PendingCalendar(db *sql.DB, thresh time.Time) ([]TudoTask, error) {
 	if err != nil {
 		return []TudoTask{}, err
 	}
+	defer rows.Close()
 
 	var pendingTasks []TudoTask
 	for rows.Next() {
