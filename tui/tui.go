@@ -3,15 +3,20 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/gdamore/tcell/v2"
 )
 
 const (
+	cmdLineAreaHeight = 3
+
 	_      = iota
 	normal = iota - 1
 	command
 )
+
+var cmd []byte
 
 func fatalError(err error, args ...string) {
 	fmt.Println("Error occurred!!")
@@ -51,12 +56,48 @@ func drawRect(s tcell.Screen, style tcell.Style, x, y, w, h int) {
 	s.SetContent(x+w-1, y+h-1, tcell.RuneLRCorner, nil, style)
 }
 
+func drawText(s tcell.Screen, style tcell.Style, x, y int, r rune) {
+	s.SetContent(x, y, r, nil, style)
+}
+
 func drawTudoWindow(s tcell.Screen, style tcell.Style) {
 	w, h := s.Size()
 	drawRect(s, style, 0, 0, w, h)
-	drawHorizontalLine(s, style, 1, h-2, w-2)
-	s.SetContent(0, h-2, tcell.RuneLTee, nil, style)
-	s.SetContent(w-1, h-2, tcell.RuneRTee, nil, style)
+	drawHorizontalLine(s, style, 1, h-cmdLineAreaHeight, w-2)
+	s.SetContent(0, h-cmdLineAreaHeight, tcell.RuneLTee, nil, style)
+	s.SetContent(w-1, h-cmdLineAreaHeight, tcell.RuneRTee, nil, style)
+}
+
+func writeToCommand(s tcell.Screen, style tcell.Style, r rune) {
+	w, h := s.Size()
+	if w-2 > 2+len(cmd) {
+		drawText(s, style, 2+len(cmd), h-cmdLineAreaHeight+1, r)
+		cmd = append(cmd, byte(r))
+	}
+}
+
+func popFromCommand(s tcell.Screen, style tcell.Style) {
+	_, h := s.Size()
+	if len(cmd) > 0 {
+		cmd = cmd[:len(cmd)-1]
+		drawText(s, style, 2+len(cmd), h-cmdLineAreaHeight+1, ' ')
+	}
+}
+
+func clearCommand(s tcell.Screen, style tcell.Style) {
+	cmd = []byte{}
+	w, h := s.Size()
+	for i := 2; i < w-1; i += 1 {
+		drawText(s, style, i, h-cmdLineAreaHeight+1, ' ')
+	}
+}
+
+func notify(s tcell.Screen, style tcell.Style, msg string) {
+	cmd = []byte{}
+	_, h := s.Size()
+	for i, c := range []byte(msg) {
+		drawText(s, style, 1+i, h-cmdLineAreaHeight+1, rune(c))
+	}
 }
 
 func Start() {
@@ -78,31 +119,47 @@ func Start() {
 	drawTudoWindow(s, defStyle)
 
 	for {
-		switch state {
-		case normal:
-		case command:
-		default:
-		}
 		s.Show()
 
 		ev := s.PollEvent()
 
 		switch ev := ev.(type) {
-		case *tcell.EventResize:
-			s.Sync()
-			s.Clear()
-			drawTudoWindow(s, defStyle)
-
 		case *tcell.EventKey:
-			switch ev.Key() {
-			case tcell.KeyCtrlC:
-				quit()
-
-			default:
-				switch ev.Rune() {
-				case ':':
+			if k := ev.Key(); k == tcell.KeyBackspace || k == tcell.KeyBackspace2 {
+				switch state {
+				case command:
+					popFromCommand(s, defStyle)
+				}
+			} else if k == tcell.KeyEnter {
+				if state == command {
+					cmds := strings.Split(string(cmd), " ")
+					if len(cmds) > 0 {
+						switch cmds[0] {
+						case "quit":
+							fallthrough
+						case "q":
+							quit()
+						default:
+							notify(s, defStyle, "unknown command")
+							state = normal
+						}
+					}
+				}
+			} else if k == tcell.KeyCtrlU {
+				if state == command {
+					clearCommand(s, defStyle)
+				}
+			} else {
+				if r := ev.Rune(); r == ':' {
 					if state != command {
 						state = command
+						_, h := s.Size()
+						clearCommand(s, defStyle)
+						drawText(s, defStyle, 1, h-cmdLineAreaHeight+1, ':')
+					}
+				} else {
+					if state == command {
+						writeToCommand(s, defStyle, r)
 					}
 				}
 			}
