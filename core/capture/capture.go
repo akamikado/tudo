@@ -3,8 +3,6 @@ package capture
 import (
 	"database/sql"
 	"errors"
-
-	"tudo/util"
 )
 
 type TudoCapture struct {
@@ -43,7 +41,7 @@ func GetActive(db *sql.DB) ([]TudoCapture, error) {
 	for rows.Next() {
 		var c TudoCapture
 		if err := rows.Scan(&c.ID, &c.Content, &c.Done, &c.CreatedAt); err != nil {
-			util.FatalError(err)
+			return []TudoCapture{}, err
 		}
 		captureList = append(captureList, c)
 	}

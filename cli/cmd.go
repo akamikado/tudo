@@ -109,7 +109,42 @@ func ParseArgs(dbFile string) {
 	case "--help":
 		fmt.Println("For help, use `" + cmdArgs[0] + " help`")
 	case "help":
-		todo("help")
+		fmt.Println(`tudo - personal command-line task manager
+
+Usage:
+    tudo [command] [arguments]
+
+Commands:
+    help                      Show this help message
+    new <type>                Create a new item
+        in                    Start a capture session
+        next                  Create a next action
+        project               Create a new project
+        context               Create a new context
+        wait                  Create a new waiting-for task
+        someday               Create a new someday/maybe item
+        <project name>        Add a new task under the given project
+
+    done <type> <id|name>     Mark an item as done
+        in <id>               Mark a capture item as done
+        task <id>             Mark a task as done
+        waiting <id>          Mark a waiting-for task as done
+        someday <id>          Mark a someday item as done
+        <project name>        Mark a project as completed
+
+    in                        List active capture (in) items
+    waiting                   List active waiting-for items
+    someday                   List active someday/maybe items
+    next                      List active next actions
+    all                       Show all active and calendar tasks
+    all <project>             Show all tasks under a specific project
+
+    read                      Review tasks marked for reading (or someday if none)
+    review                    Review weekly progress and missed calendar tasks
+    edit <type> <id>          Edit an existing item (still in development)
+    clean                     Remove completed items from all lists
+    undo                      Undo the last completed action
+`)
 
 	case "new":
 		if len(cmdArgs) == 2 {
@@ -494,7 +529,11 @@ func ParseArgs(dbFile string) {
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
-			if !waiting.IDExists(db, uint32(id)) {
+			exists, err := waiting.IDExists(db, uint32(id))
+			if err != nil {
+				fatalError(err)
+			}
+			if !exists {
 				fmt.Println("Waiting action `" + cmdArgs[3] + "` does not exist")
 			}
 
@@ -797,19 +836,19 @@ func ParseArgs(dbFile string) {
 
 		switch cmdArgs[2] {
 		case "in":
-			todo("edit in")
+			todo()
 
 		case "task":
-			todo("edit task")
+			todo()
 
 		case "waiting":
-			todo("edit waiting")
+			todo()
 
 		case "someday":
-			todo("edit someday")
+			todo()
 
 		case "project":
-			todo("edit project")
+			todo()
 		}
 
 	case "clean":
