@@ -182,7 +182,7 @@ Commands:
 					capturing = false
 				default:
 					line, _ := reader.ReadString('\n')
-					captureTxt = captureTxt + line + "\n"
+					captureTxt = captureTxt + line
 				}
 			}
 			capture.New(db, captureTxt)
