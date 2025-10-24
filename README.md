@@ -21,7 +21,3 @@ Following features are fully implemented:
 - `someday` list
 - `review`
 - `read` list
-
-## In Progress
-
-A TUI for `tudo` is being implemented in the `dev` branch using [`tcell`](https://github.com/gdamore/tcell/tree/main).
