@@ -6,6 +6,7 @@ import (
 	"io/fs"
 	"os"
 
+	"tudo/cli/plaintext"
 	"tudo/database"
 	"tudo/tui"
 )
@@ -49,6 +50,18 @@ func main() {
 		os.Exit(1)
 	}
 
-	// cli.ParseArgs(dbFile)
-	tui.Start(dbFile)
+	args := os.Args
+	args = args[1:]
+
+	if len(args) > 0 && args[0] == "--plaintext" {
+		args = args[1:]
+		plaintext.ParseArgs(dbFile, args)
+	} else if len(args) > 0 && args[len(args)-1] == "--plaintext" {
+		args = args[:len(args)-1]
+		plaintext.ParseArgs(dbFile, args)
+	} else if len(args) == 1 && args[0] == "start" {
+		tui.Start(dbFile)
+	} else {
+		// TODO: cli with bubble tea without starting tui
+	}
 }
