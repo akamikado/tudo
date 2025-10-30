@@ -6,8 +6,8 @@ import (
 	"io/fs"
 	"os"
 
-	"tudo/cli"
 	"tudo/database"
+	"tudo/tui"
 )
 
 func main() {
@@ -49,5 +49,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	cli.ParseArgs(dbFile)
+	// cli.ParseArgs(dbFile)
+	tui.Start(dbFile)
 }
