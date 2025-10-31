@@ -108,7 +108,7 @@ func ParseArgs(dbFile string, args []string) {
 	case "--help":
 		fmt.Println("For help, use `tudo help`")
 	case "help":
-		fmt.Println(`tudo - personal command-line task manager
+		fmt.Print(`tudo - personal command-line task manager
 
 Usage:
     tudo [command] [arguments]
@@ -1055,35 +1055,28 @@ Commands:
 		}
 
 	default:
-		if len(args) == 1 {
-			switch args[0] {
-			case "projects":
-				projects, err := projects.GetActive(db)
-				if err != nil {
-					fatalError(err)
-				}
-				if len(projects) == 0 {
-					fmt.Println("No active projects")
-				}
-				for _, p := range projects {
-					fmt.Print(fmt.Sprint("- ID: ", p.ID, "\n", p.Content, "\n"))
-				}
-
-			case "contexts":
-				contextList, err := contexts.GetAll(db)
-				if err != nil {
-					fatalError(err)
-				}
-				for _, c := range contextList {
-					fmt.Print(fmt.Sprint("- ID: ", c.ID, "\n", c.Content, "\n"))
-				}
-
-			default:
-				nonFatalError(invalidCommand, args[0])
+		if len(args) == 1 && args[0] == "projects" {
+			projects, err := projects.GetActive(db)
+			if err != nil {
+				fatalError(err)
+			}
+			if len(projects) == 0 {
+				fmt.Println("No active projects")
+			}
+			for _, p := range projects {
+				fmt.Print(fmt.Sprint("- ID: ", p.ID, "\n", p.Content, "\n"))
+			}
+		} else if len(args) == 1 && args[0] == "contexts" {
+			contextList, err := contexts.GetAll(db)
+			if err != nil {
+				fatalError(err)
+			}
+			for _, c := range contextList {
+				fmt.Print(fmt.Sprint("- ID: ", c.ID, "\n", c.Content, "\n"))
 			}
 		} else {
 			projectName := ""
-			for i := 0; i < len(args); i++ {
+			for i := range args {
 				if i > 0 {
 					projectName += " "
 				}
