@@ -23,13 +23,14 @@ func New(db *sql.DB, content string) error {
 
 func IDExists(db *sql.DB, id uint32) (bool, error) {
 	row := db.QueryRow("SELECT id, content, done, created_at FROM waiting WHERE id = ? AND done = 0", id)
-	err := row.Err()
-	if errors.Is(err, sql.ErrNoRows) {
+
+	var wID uint32
+	if err := row.Scan(&wID); errors.Is(err, sql.ErrNoRows) {
 		return false, err
 	} else if err != nil {
 		return false, err
 	}
-	return true, err
+	return true, nil
 }
 
 func ContentExists(db *sql.DB, content string) (bool, uint32, error) {

@@ -21,8 +21,8 @@ func New(db *sql.DB, captureTxt string) error {
 
 func IDExists(db *sql.DB, id uint32) (bool, error) {
 	row := db.QueryRow("SELECT id FROM capture WHERE id = ?", id)
-	err := row.Err()
-	if errors.Is(err, sql.ErrNoRows) {
+	var cID uint32
+	if err := row.Scan(&cID); errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -58,12 +58,12 @@ func Done(db *sql.DB, id uint32) error {
 
 func Count(db *sql.DB) (int, error) {
 	row := db.QueryRow("SELECT COUNT(*) FROM capture WHERE done = 0")
-	err := row.Err()
+
+	var cnt int
+	err := row.Scan(&cnt)
 	if err != nil {
 		return 0, err
 	}
-	var cnt int
-	row.Scan(&cnt)
 
 	return cnt, nil
 }

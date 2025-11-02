@@ -20,13 +20,12 @@ func New(db *sql.DB, table string, rowID uint32) error {
 
 func Get(db *sql.DB) (TudoLog, bool, error) {
 	row := db.QueryRow("SELECT id, table_name, row_id, created_at FROM action_log ORDER BY id DESC LIMIT 1")
-	err := row.Err()
+
+	var a TudoLog
+	err := row.Scan(&a.ID, &a.TableName, &a.RowID, &a.CreatedAt)
 	if err != nil {
 		return TudoLog{}, false, err
 	}
-
-	var a TudoLog
-	row.Scan(&a.ID, &a.TableName, &a.RowID, &a.CreatedAt)
 
 	if a.ID <= 0 || a.TableName == "" || a.RowID <= 0 {
 		return TudoLog{}, false, nil

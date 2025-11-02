@@ -36,13 +36,12 @@ func ContentExists(db *sql.DB, content string) (bool, uint32, error) {
 
 func Get(db *sql.DB, id uint32) (TudoProject, error) {
 	row := db.QueryRow("SELECT id, content, done, created_at, finished_at FROM projects WHERE id = ?", id)
-	err := row.Err()
+
+	var p TudoProject
+	err := row.Scan(&p.ID, &p.Content, &p.Done, &p.CreatedAt, &p.FinishedAt)
 	if err != nil {
 		return TudoProject{}, err
 	}
-
-	var p TudoProject
-	row.Scan(&p.ID, &p.Content, &p.Done, &p.CreatedAt, &p.FinishedAt)
 
 	return p, nil
 }

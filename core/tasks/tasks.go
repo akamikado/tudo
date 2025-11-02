@@ -25,9 +25,9 @@ func New(db *sql.DB, content string, projectID *uint32, context *string, due *st
 }
 
 func IDExists(db *sql.DB, id uint32) (bool, error) {
-	row := db.QueryRow("SELECT content FROM tasks WHERE id = ?", id)
-	err := row.Err()
-	if errors.Is(err, sql.ErrNoRows) {
+	row := db.QueryRow("SELECT id FROM tasks WHERE id = ?", id)
+	var taskID uint32
+	if err := row.Scan(&taskID); errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	} else if err != nil {
 		return false, err
@@ -37,12 +37,11 @@ func IDExists(db *sql.DB, id uint32) (bool, error) {
 
 func Get(db *sql.DB, id uint32) (TudoTask, error) {
 	row := db.QueryRow("SELECT id, content, project_id, context, due, done, created_at, finished_at FROM tasks WHERE id = ?", id)
-	err := row.Err()
+	var task TudoTask
+	err := row.Scan(&task.ID, &task.Content, &task.ProjectID, &task.Context, &task.Due, &task.Done, &task.CreatedAt, &task.FinishedAt)
 	if err != nil {
 		return TudoTask{}, err
 	}
-	var task TudoTask
-	row.Scan(&task.ID, &task.Content, &task.ProjectID, &task.Context, &task.Due, &task.Done, &task.CreatedAt, &task.FinishedAt)
 
 	return task, nil
 }
@@ -208,34 +207,31 @@ func Done(db *sql.DB, id uint32) error {
 
 func CountCalendar(db *sql.DB) (int, error) {
 	row := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE done = 0 AND due IS NOT NULL")
-	err := row.Err()
+	var cnt int
+	err := row.Scan(&cnt)
 	if err != nil {
 		return 0, err
 	}
-	var cnt int
-	row.Scan(&cnt)
 	return cnt, nil
 }
 
 func CountNextActions(db *sql.DB) (int, error) {
 	row := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE done = 0 AND project_id IS NULL AND due IS NULL")
-	err := row.Err()
+	var cnt int
+	err := row.Scan(&cnt)
 	if err != nil {
 		return 0, err
 	}
-	var cnt int
-	row.Scan(&cnt)
 	return cnt, nil
 }
 
 func CountProjectTasks(db *sql.DB) (int, error) {
 	row := db.QueryRow("SELECT COUNT(*) FROM tasks WHERE done = 0 AND project_id IS NOT NULL AND due IS NULL")
-	err := row.Err()
+	var cnt int
+	err := row.Scan(&cnt)
 	if err != nil {
 		return 0, err
 	}
-	var cnt int
-	row.Scan(&cnt)
 	return cnt, nil
 }
 

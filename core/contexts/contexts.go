@@ -33,13 +33,11 @@ func ContentExists(db *sql.DB, content string) (bool, uint32, error) {
 
 func Get(db *sql.DB, id uint32) (TudoContext, error) {
 	row := db.QueryRow("SELECT id, content FROM contexts WHERE id = ?", id)
-	err := row.Err()
+	var c TudoContext
+	err := row.Scan(&c.ID, &c.Content)
 	if err != nil {
 		return TudoContext{}, err
 	}
-
-	var c TudoContext
-	row.Scan(&c.ID, &c.Content)
 
 	return c, nil
 }
