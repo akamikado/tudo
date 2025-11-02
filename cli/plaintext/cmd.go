@@ -354,7 +354,7 @@ Commands:
 			dueStr, _ := reader.ReadString('\n')
 			dueStr = strings.TrimSpace(dueStr)
 
-			if dueStr == "" {
+			if dueStr != "" {
 				due, err := time.Parse("2006-01-02", dueStr)
 				if err != nil {
 					nonFatalError(err)
