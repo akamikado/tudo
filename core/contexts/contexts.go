@@ -19,15 +19,14 @@ func New(db *sql.DB, content string) error {
 
 func ContentExists(db *sql.DB, content string) (bool, uint32, error) {
 	row := db.QueryRow("SELECT id FROM contexts WHERE content = ?", content)
-	err := row.Err()
+
+	var id uint32
+	err := row.Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, 0, nil
 	} else if err != nil {
 		return false, 0, err
 	}
-
-	var id uint32
-	row.Scan(&id)
 
 	return true, id, nil
 }
