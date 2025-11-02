@@ -48,7 +48,7 @@ func Get(db *sql.DB, id uint32) (TudoTask, error) {
 }
 
 func GetActiveNextActions(db *sql.DB) ([]TudoTask, error) {
-	rows, err := db.Query("SELECT id, content, context FROM tasks WHERE done == 0 AND project_id IS NULL GROUP BY context")
+	rows, err := db.Query("SELECT id, content, context FROM tasks WHERE done == 0 AND project_id IS NULL AND due IS NULL GROUP BY context")
 	if err != nil {
 		return []TudoTask{}, err
 	}
