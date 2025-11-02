@@ -210,7 +210,7 @@ Commands:
 
 			fmt.Println("Select context (Press ENTER if no context): ")
 			for k, v := range contextMap {
-				fmt.Println(fmt.Sprint(k, ". ", v, "\n"))
+				fmt.Print(fmt.Sprint(k, ". ", *v, "\n"))
 			}
 			number, _ := reader.ReadString('\n')
 			number = strings.TrimSpace(number)
@@ -270,7 +270,7 @@ Commands:
 		case "context":
 			fmt.Println("Currently available contexts: ")
 			for k, v := range contextMap {
-				fmt.Println(fmt.Sprint(k, ". ", v, "\n"))
+				fmt.Print(fmt.Sprint(k, ". ", *v, "\n"))
 			}
 			fmt.Println("New context: ")
 			context, _ := reader.ReadString('\n')
@@ -367,7 +367,7 @@ Commands:
 
 			fmt.Println("Please enter context (Press ENTER for no context): ")
 			for k, v := range contextMap {
-				fmt.Println(fmt.Sprint(k, ". ", v))
+				fmt.Print(fmt.Sprint(k, ". ", *v, "\n"))
 			}
 			number, _ := reader.ReadString('\n')
 			number = strings.TrimSpace(number)
