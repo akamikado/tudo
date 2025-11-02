@@ -53,10 +53,10 @@ func main() {
 	args := os.Args
 	args = args[1:]
 
-	if len(args) > 0 && args[0] == "--plaintext" {
+	if len(args) > 0 && (args[0] == "--plaintext" || args[0] == "-p") {
 		args = args[1:]
 		plaintext.ParseArgs(dbFile, args)
-	} else if len(args) > 0 && args[len(args)-1] == "--plaintext" {
+	} else if len(args) > 0 && (args[len(args)-1] == "--plaintext" || args[len(args)-1] == "-p") {
 		args = args[:len(args)-1]
 		plaintext.ParseArgs(dbFile, args)
 	} else if len(args) == 1 && args[0] == "start" {
