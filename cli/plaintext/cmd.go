@@ -1,4 +1,4 @@
-package cli
+package plaintext
 
 import (
 	"bufio"
@@ -25,7 +25,7 @@ var invalidCommand error = errors.New("Invalid command: ")
 
 var invalidCommandFormat error = errors.New("Invalid command format")
 
-func ParseArgs(dbFile string) {
+func ParseArgs(dbFile string, args []string) {
 	db, err := database.Connect(dbFile)
 	if err != nil {
 		fmt.Println("Could not connect to database :" + err.Error())
@@ -33,8 +33,7 @@ func ParseArgs(dbFile string) {
 	}
 	defer db.Close()
 
-	cmdArgs := os.Args
-	if len(cmdArgs) == 1 {
+	if len(args) == 0 {
 		noTasks := true
 
 		calendarTasks, err := tasks.GetTodayCalenderTasks(db)
@@ -103,13 +102,13 @@ func ParseArgs(dbFile string) {
 		return
 	}
 
-	switch cmdArgs[1] {
+	switch args[0] {
 	case "-h":
 		fallthrough
 	case "--help":
-		fmt.Println("For help, use `" + cmdArgs[0] + " help`")
+		fmt.Println("For help, use `tudo help`")
 	case "help":
-		fmt.Println(`tudo - personal command-line task manager
+		fmt.Print(`tudo - personal command-line task manager
 
 Usage:
     tudo [command] [arguments]
@@ -147,7 +146,7 @@ Commands:
 `)
 
 	case "new":
-		if len(cmdArgs) == 2 {
+		if len(args) == 1 {
 			nonFatalError(invalidCommandFormat)
 		}
 
@@ -162,7 +161,7 @@ Commands:
 
 		reader := bufio.NewReader(os.Stdin)
 
-		switch cmdArgs[2] {
+		switch args[1] {
 		case "in":
 			fmt.Println("Capture started (<Ctrl-c> on a new line to stop capture)")
 			sigChan := make(chan os.Signal, 1)
@@ -331,11 +330,11 @@ Commands:
 
 		default:
 			projectName := ""
-			for i := 2; i < len(cmdArgs); i++ {
-				if i > 2 {
+			for i := 1; i < len(args); i++ {
+				if i > 1 {
 					projectName += " "
 				}
-				projectName += cmdArgs[i]
+				projectName += args[i]
 			}
 
 			var projectID uint32
@@ -409,12 +408,12 @@ Commands:
 		}
 
 	case "done":
-		if len(cmdArgs) < 4 {
+		if len(args) < 3 {
 			nonFatalError(invalidCommandFormat)
 		}
-		switch cmdArgs[2] {
+		switch args[1] {
 		case "in":
-			captureID, err := strconv.Atoi(cmdArgs[3])
+			captureID, err := strconv.Atoi(args[2])
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
@@ -424,7 +423,7 @@ Commands:
 				fatalError(err)
 			}
 			if !exists {
-				fmt.Println("Capture item `" + cmdArgs[3] + "` does not exist")
+				fmt.Println("Capture item `" + args[2] + "` does not exist")
 				return
 			}
 
@@ -432,17 +431,17 @@ Commands:
 				fatalError(err)
 			}
 
-			fmt.Println("Marked capture item `" + cmdArgs[3] + "` as finished\n")
+			fmt.Println("Marked capture item `" + args[2] + "` as finished\n")
 
 			if err := log.New(db, "capture", uint32(captureID)); err != nil {
 				fatalError(err)
 			}
 
 		case "someday":
-			if len(cmdArgs) < 3 {
+			if len(args) < 2 {
 				nonFatalError(invalidCommandFormat)
 			}
-			id, err := strconv.Atoi(cmdArgs[3])
+			id, err := strconv.Atoi(args[2])
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
@@ -452,7 +451,7 @@ Commands:
 				fatalError(err)
 			}
 			if !exists {
-				fmt.Println("Someday action `" + cmdArgs[3] + "` does not exist")
+				fmt.Println("Someday action `" + args[2] + "` does not exist")
 				return
 			}
 
@@ -460,7 +459,7 @@ Commands:
 				fatalError(err)
 			}
 
-			fmt.Println("Marked someday task `" + cmdArgs[3] + "` as done")
+			fmt.Println("Marked someday task `" + args[2] + "` as done")
 
 			if err := log.New(db, "someday", uint32(id)); err != nil {
 				fatalError(err)
@@ -522,10 +521,10 @@ Commands:
 			}
 
 		case "waiting":
-			if len(cmdArgs) < 3 {
+			if len(args) < 2 {
 				nonFatalError(invalidCommandFormat)
 			}
-			id, err := strconv.Atoi(cmdArgs[3])
+			id, err := strconv.Atoi(args[2])
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
@@ -534,21 +533,21 @@ Commands:
 				fatalError(err)
 			}
 			if !exists {
-				fmt.Println("Waiting action `" + cmdArgs[3] + "` does not exist")
+				fmt.Println("Waiting action `" + args[2] + "` does not exist")
 			}
 
 			if err := waiting.Done(db, uint32(id)); err != nil {
 				fatalError(err)
 			}
 
-			fmt.Println("Marked waiting task `" + cmdArgs[3] + "` as done")
+			fmt.Println("Marked waiting task `" + args[2] + "` as done")
 
 			if err := log.New(db, "waiting", uint32(id)); err != nil {
 				fatalError(err)
 			}
 
 		case "task":
-			taskID, err := strconv.Atoi(cmdArgs[3])
+			taskID, err := strconv.Atoi(args[2])
 			if err != nil {
 				nonFatalError(invalidCommandFormat)
 			}
@@ -558,7 +557,7 @@ Commands:
 				fatalError(err)
 			}
 			if !exists {
-				fmt.Print(fmt.Sprint("Task ", cmdArgs[3], " does not exist\n"))
+				fmt.Print(fmt.Sprint("Task ", args[2], " does not exist\n"))
 			}
 
 			if err := tasks.Done(db, uint32(taskID)); err != nil {
@@ -570,7 +569,7 @@ Commands:
 				fatalError(err)
 			}
 
-			fmt.Println("Finished task `" + cmdArgs[3] + "`\n`" + task.Content + "`")
+			fmt.Println("Finished task `" + args[2] + "`\n`" + task.Content + "`")
 
 			if err := log.New(db, "tasks", uint32(taskID)); err != nil {
 				fatalError(err)
@@ -578,11 +577,11 @@ Commands:
 
 		default:
 			projectName := ""
-			for i := 2; i < len(cmdArgs); i++ {
-				if i > 2 {
+			for i := 1; i < len(args); i++ {
+				if i > 1 {
 					projectName += " "
 				}
-				projectName += cmdArgs[i]
+				projectName += args[i]
 			}
 			exists, projectID, err := projects.ContentExists(db, projectName)
 			if err != nil {
@@ -698,7 +697,7 @@ Commands:
 		}
 
 	case "all":
-		if len(cmdArgs) == 2 {
+		if len(args) == 1 {
 			noTasks := true
 
 			calendarTasks, err := tasks.GetAllCalenderTasks(db)
@@ -786,11 +785,11 @@ Commands:
 			}
 		} else {
 			projectName := ""
-			for i := 2; i < len(cmdArgs); i++ {
-				if i > 2 {
+			for i := 1; i < len(args); i++ {
+				if i > 1 {
 					projectName += " "
 				}
-				projectName += cmdArgs[i]
+				projectName += args[i]
 			}
 			exists, projectID, err := projects.ContentExists(db, projectName)
 			if err != nil {
@@ -830,11 +829,11 @@ Commands:
 		}
 
 	case "edit":
-		if len(cmdArgs) < 3 {
+		if len(args) < 2 {
 			nonFatalError(invalidCommandFormat)
 		}
 
-		switch cmdArgs[2] {
+		switch args[1] {
 		case "in":
 			todo()
 
@@ -1056,39 +1055,32 @@ Commands:
 		}
 
 	default:
-		if len(cmdArgs) == 2 {
-			switch cmdArgs[1] {
-			case "projects":
-				projects, err := projects.GetActive(db)
-				if err != nil {
-					fatalError(err)
-				}
-				if len(projects) == 0 {
-					fmt.Println("No active projects")
-				}
-				for _, p := range projects {
-					fmt.Print(fmt.Sprint("- ID: ", p.ID, "\n", p.Content, "\n"))
-				}
-
-			case "contexts":
-				contextList, err := contexts.GetAll(db)
-				if err != nil {
-					fatalError(err)
-				}
-				for _, c := range contextList {
-					fmt.Print(fmt.Sprint("- ID: ", c.ID, "\n", c.Content, "\n"))
-				}
-
-			default:
-				nonFatalError(invalidCommand, cmdArgs[1])
+		if len(args) == 1 && args[0] == "projects" {
+			projects, err := projects.GetActive(db)
+			if err != nil {
+				fatalError(err)
+			}
+			if len(projects) == 0 {
+				fmt.Println("No active projects")
+			}
+			for _, p := range projects {
+				fmt.Print(fmt.Sprint("- ID: ", p.ID, "\n", p.Content, "\n"))
+			}
+		} else if len(args) == 1 && args[0] == "contexts" {
+			contextList, err := contexts.GetAll(db)
+			if err != nil {
+				fatalError(err)
+			}
+			for _, c := range contextList {
+				fmt.Print(fmt.Sprint("- ID: ", c.ID, "\n", c.Content, "\n"))
 			}
 		} else {
 			projectName := ""
-			for i := 1; i < len(cmdArgs); i++ {
-				if i > 1 {
+			for i := range args {
+				if i > 0 {
 					projectName += " "
 				}
-				projectName += cmdArgs[i]
+				projectName += args[i]
 			}
 			exists, projectID, err := projects.ContentExists(db, projectName)
 			if err != nil {
