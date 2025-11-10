@@ -51,14 +51,5 @@ func main() {
 
 	args := os.Args
 	args = args[1:]
-
-	if len(args) > 0 && (args[0] == "--plaintext" || args[0] == "-p") {
-		args = args[1:]
-		plaintext.ParseArgs(dbFile, args)
-	} else if len(args) > 0 && (args[len(args)-1] == "--plaintext" || args[len(args)-1] == "-p") {
-		args = args[:len(args)-1]
-		plaintext.ParseArgs(dbFile, args)
-	} else {
-		// TODO: cli with bubble tea without starting tui
-	}
+	plaintext.ParseArgs(dbFile, args)
 }

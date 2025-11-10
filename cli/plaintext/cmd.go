@@ -828,28 +828,6 @@ Commands:
 			}
 		}
 
-	case "edit":
-		if len(args) < 2 {
-			nonFatalError(invalidCommandFormat)
-		}
-
-		switch args[1] {
-		case "in":
-			todo()
-
-		case "task":
-			todo()
-
-		case "waiting":
-			todo()
-
-		case "someday":
-			todo()
-
-		case "project":
-			todo()
-		}
-
 	case "clean":
 		cnt, err := capture.Count(db)
 		if err != nil {
